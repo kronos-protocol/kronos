@@ -1,0 +1,63 @@
+# CLion project files
+.idea/
+*.iml
+
+# Build directories
+cmake-build-*/
+build/
+out/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+compile_commands.json
+
+# Object files and binaries
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+*.out
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test/coverage artifacts
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+
+# CLion run/debug configuration history
+.idea/.idea_modules/
+.idea/.name
+.idea/.workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries
+.idea/shelf/
+.idea/assetWizardSettings.xml
+
+# CTest output
+Testing/
+test_detail.xml
+LastTest.log
+LastTestsFailed.log
