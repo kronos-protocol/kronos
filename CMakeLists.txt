@@ -4,8 +4,18 @@ project(kronos VERSION 1.0.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 
 add_library(kronos STATIC
-        include/kronos.h
+        src/frame.c
+        server.c
 )
+
+add_executable(kronos_preview_server server.c)
+add_executable(kronos_preview_client client.c)
+
+if(WIN32)
+    target_link_libraries(kronos_preview_server ws2_32)
+    target_link_libraries(kronos_preview_client ws2_32)
+endif()
+
 
 target_include_directories(kronos PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
