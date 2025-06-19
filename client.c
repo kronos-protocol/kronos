@@ -6,7 +6,7 @@
 
 int main() {
     WSADATA wsaData;
-    WSAStartup(MAKEWORD(2,2), &wsaData);
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
 
     SOCKET sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -25,12 +25,12 @@ int main() {
 
         message[strcspn(message, "\n")] = 0;
 
-        if (strcmp(message, "quit") == 0) break;
+        if (strcmp(message, "quit") == 0)
+            break;
 
-        sendto(sockfd, message, strlen(message), 0,
-               (struct sockaddr*)&server_addr, sizeof(server_addr));
+        sendto(sockfd, message, strlen(message), 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
 
-        int received = recvfrom(sockfd, buffer, sizeof(buffer)-1, 0, NULL, NULL);
+        int received = recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0, NULL, NULL);
         if (received > 0) {
             buffer[received] = '\0';
             printf("Server: %s\n", buffer);
