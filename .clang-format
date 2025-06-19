@@ -4,17 +4,13 @@ TabWidth: 4
 UseTab: Never
 PointerAlignment: Left
 DerivePointerAlignment: false
-SpacesInConditionalStatement: true
+SpacesInConditionalStatement: false
 ColumnLimit: 220
-BinPackArguments: false
-BinPackParameters: false
-AllowAllArgumentsOnNextLine: false
 BreakBeforeBraces: Custom
 BraceWrapping:
-  AfterFunction: true
-  AfterClass: true
-  AfterStruct: true
-  AfterUnion: true
-PenaltyBreakAssignment: 10
-PenaltyBreakBeforeFirstCallParameter: 30
-
+  AfterFunction: false
+  AfterClass: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterControlStatement: Multiline
+  BeforeElse: false
