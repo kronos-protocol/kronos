@@ -5,15 +5,14 @@ set(CMAKE_C_STANDARD 11)
 
 add_library(kronos STATIC
         src/frame/frame_lifecycle.c
-        server.c
 )
 
 add_executable(kronos_preview_server server.c)
 add_executable(kronos_preview_client client.c)
 
 if(WIN32)
-    target_link_libraries(kronos_preview_server ws2_32)
-    target_link_libraries(kronos_preview_client ws2_32)
+    target_link_libraries(kronos_preview_server PRIVATE kronos ws2_32)
+    target_link_libraries(kronos_preview_client PRIVATE kronos ws2_32)
 endif()
 
 
