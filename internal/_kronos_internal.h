@@ -17,6 +17,6 @@ struct Frame {
     uint8_t* data;
 };
 
-Frame _create_frame(uint8_t* buffer, uint16_t received_bytes, uint8_t* frame_data_out);
+Frame _create_frame(const uint8_t* buffer, uint16_t received_bytes, uint8_t* frame_data_out);
 
 #endif //KRONOS_INTERNAL_H
