@@ -5,4 +5,16 @@ UseTab: Never
 PointerAlignment: Left
 DerivePointerAlignment: false
 SpacesInConditionalStatement: true
+ColumnLimit: 220
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterClass: true
+  AfterStruct: true
+  AfterUnion: true
+PenaltyBreakAssignment: 10
+PenaltyBreakBeforeFirstCallParameter: 30
 
