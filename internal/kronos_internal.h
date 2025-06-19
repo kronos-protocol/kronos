@@ -1,7 +1,6 @@
 #ifndef KRONOS_INTERNAL_H
 #define KRONOS_INTERNAL_H
 #include <stdint.h>
-#include "../include/kronos.h"
 
 struct Frame {
     uint16_t length; // Given by UDP socket
@@ -17,6 +16,6 @@ struct Frame {
     uint8_t* data;
 };
 
-Frame _create_frame(const uint8_t* buffer, uint16_t received_bytes, uint8_t* frame_data_out);
+#define KRONOS_FRAME_HEADER_LENGTH 5
 
 #endif //KRONOS_INTERNAL_H
