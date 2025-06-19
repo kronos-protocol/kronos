@@ -7,10 +7,11 @@ struct Frame {
 
     // Data in Char Buffer
     // Header
-    char protocol_char; // must be 0x4B ASCII 'K'
+    char protocol_char;       // must be 0x4B ASCII 'K'
     uint8_t protocol_version; // bitmask: major(3bit) + minor(3bit) + patch(2bit)
     uint8_t frame_type;
-    uint16_t presence_flags; // bitmask for flags, each 1bit: frame_id, session_id, sender_id, fragment_info, (Rest Empty for now)
+    uint16_t presence_flags; // bitmask for flags, each 1bit: frame_id, session_id,
+                             // sender_id, fragment_info, (Rest Empty for now)
 
     // Body
     uint8_t* data;
@@ -18,4 +19,4 @@ struct Frame {
 
 #define KRONOS_FRAME_HEADER_LENGTH 5
 
-#endif //KRONOS_INTERNAL_H
+#endif // KRONOS_INTERNAL_H
