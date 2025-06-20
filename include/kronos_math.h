@@ -15,5 +15,6 @@
  * @return true if the bit is set, false otherwise.
  */
 bool krs_math_bitmask_get_flag(uint8_t flag_pos, const uint8_t* data, uint8_t length);
+void krs_math_bitmask_set_flag(uint8_t flag_pos, uint8_t* data, uint8_t length);
 
 #endif //KRONOS_MATH_H
