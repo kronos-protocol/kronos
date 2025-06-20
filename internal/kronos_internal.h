@@ -17,6 +17,8 @@ struct Frame {
     uint8_t* data;
 };
 
+uint16_t _krs_frame_calculate_data_length(uint16_t received_bytes);
+
 #define KRONOS_FRAME_HEADER_LENGTH 5
 
 #endif // KRONOS_INTERNAL_H
