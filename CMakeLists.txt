@@ -6,10 +6,14 @@ set(CMAKE_C_STANDARD 11)
 add_library(kronos STATIC
         src/frame/frame_lifecycle.c
         src/math/bitmask.c
+        src/frame/frame_utility.c
 )
 
 add_executable(kronos_preview_server server.c)
 add_executable(kronos_preview_client client.c)
+add_executable(kronos_test test_app.c)
+
+target_link_libraries(kronos_test PRIVATE kronos ws2_32)
 
 if (WIN32)
     target_link_libraries(kronos_preview_server PRIVATE kronos ws2_32)
