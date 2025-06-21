@@ -40,12 +40,20 @@ Frame krs_frame_create(const uint8_t* buffer, const uint16_t received_bytes, uin
 Frame* krs_frame_create_heap(const uint8_t* buffer, const uint16_t received_bytes) {
     Frame* frame = malloc(sizeof(Frame));
     uint16_t frame_data_size = _krs_frame_calculate_data_length(received_bytes);
-    uint8_t* frame_data = malloc(frame_data_size);
-    *frame = s_create_frame(buffer, received_bytes, frame_data, frame_data_size);
+    frame->data = malloc(frame_data_size);
+    *frame = s_create_frame(buffer, received_bytes, frame->data, frame_data_size);
     return frame;
 }
 
 
 void krs_frame_init(const uint8_t* buffer, const uint16_t received_bytes, Frame* out, const uint16_t out_data_size) {
     *out = s_create_frame(buffer, received_bytes, out->data, out_data_size);
+}
+
+void krs_frame_destroy(Frame** frame) {
+    if (*frame != NULL) {
+        free((*frame)->data);
+        free(*frame);
+        *frame = NULL;
+    }
 }
