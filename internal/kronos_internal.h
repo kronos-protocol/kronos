@@ -9,6 +9,7 @@ struct Frame {
     // Header
     char protocol_char;       // must be 0x4B ASCII 'K'
     uint8_t protocol_version; // bitmask: major(3bit) + minor(3bit) + patch(2bit)
+    uint8_t channel;
     uint8_t frame_type;
     uint16_t presence_flags; // bitmask for flags, each 1bit: frame_id, session_id,
                              // sender_id, fragment_info, (Rest Empty for now)
@@ -19,6 +20,6 @@ struct Frame {
 
 uint16_t _krs_frame_calculate_data_length(uint16_t received_bytes);
 
-#define KRONOS_FRAME_HEADER_LENGTH 5
+#define KRONOS_FRAME_HEADER_LENGTH 6
 
 #endif // KRONOS_INTERNAL_H
