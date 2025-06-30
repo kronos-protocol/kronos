@@ -10,6 +10,7 @@ Frame krs_frame_create(const uint8_t* buffer, uint16_t received_bytes, uint8_t* 
 Frame* krs_frame_create_heap(const uint8_t* buffer, uint16_t received_bytes);
 void krs_frame_init(const uint8_t* buffer, uint16_t received_bytes, Frame* out, uint16_t out_data_size);
 
+void krs_frame_get_content(const Frame* frame, uint8_t* out, uint16_t out_data_size);
 
 
 void krs_frame_destroy(Frame** frame);
