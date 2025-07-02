@@ -17,4 +17,8 @@
 bool krs_math_bitmask_get_flag(uint8_t flag_pos, const uint8_t* data, uint8_t length);
 void krs_math_bitmask_set_flag(uint8_t flag_pos, uint8_t* data, uint8_t length);
 
+uint16_t krs_math_uint16_from_uint8(uint8_t ms_byte, uint8_t ls_byte);
+
+uint64_t krs_math_uint64_from_uint8(const uint8_t* source, uint8_t offset, uint16_t source_length);
+
 #endif //KRONOS_MATH_H
