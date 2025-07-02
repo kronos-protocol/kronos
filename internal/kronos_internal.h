@@ -13,13 +13,11 @@ struct Frame {
     uint64_t packet_id;
 
     // Body
-    uint16_t body_size;
+    uint16_t body_length;
     uint8_t* body; // Contains Metadata from presence_flags and the actual data that is transferred
 };
 
-uint16_t _krs_frame_calculate_body_length(uint16_t received_bytes);
-
-#define KRONOS_FRAME_HEADER_LENGTH 13
+#define KRONOS_FRAME_HEADER_LENGTH 14
 #define KRONOS_BUFFER_SIZE 1024
 
 #endif // KRONOS_INTERNAL_H
