@@ -7,25 +7,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-static Frame s_create_frame(const uint8_t* buffer, const uint16_t received_bytes, uint8_t* frame_data_out, uint16_t stack_data_out_size) {
+static Frame_t s_create_frame(const uint8_t* buffer, const uint16_t received_bytes, uint8_t* frame_data_out, uint16_t stack_data_out_size) {
     uint16_t data_length = krs_frame_calculate_body_length(received_bytes);
     if (stack_data_out_size < data_length) {
         // TODO: use errno
-        const Frame invalid = {0};
+        const Frame_t invalid = {0};
         return invalid;
     }
 
     if (buffer == NULL) {
-        const Frame invalid = {0};
+        const Frame_t invalid = {0};
         return invalid;
     }
 
     if (frame_data_out == NULL) {
-        const Frame invalid = {0};
+        const Frame_t invalid = {0};
         return invalid;
     }
 
-    Frame frame;
+    Frame_t frame;
     frame.body_length = krs_frame_calculate_body_length(received_bytes);
     frame.protocol_char = (char)buffer[0];
     frame.protocol_version = buffer[1];
@@ -39,12 +39,12 @@ static Frame s_create_frame(const uint8_t* buffer, const uint16_t received_bytes
     return frame;
 }
 
-Frame krs_frame_create(const uint8_t* buffer, const uint16_t received_bytes, uint8_t* stack_data_out, uint16_t stack_data_out_size) {
+Frame_t krs_frame_create(const uint8_t* buffer, const uint16_t received_bytes, uint8_t* stack_data_out, uint16_t stack_data_out_size) {
     return s_create_frame(buffer, received_bytes, stack_data_out, stack_data_out_size);
 }
 
-Frame* krs_frame_create_heap(const uint8_t* buffer, const uint16_t received_bytes) {
-    Frame* frame = malloc(sizeof(Frame));
+Frame_t* krs_frame_create_heap(const uint8_t* buffer, const uint16_t received_bytes) {
+    Frame_t* frame = malloc(sizeof(Frame_t));
     uint16_t frame_data_size = krs_frame_calculate_body_length(received_bytes);
     frame->body = malloc(frame_data_size);
     *frame = s_create_frame(buffer, received_bytes, frame->body, frame_data_size);
@@ -52,11 +52,11 @@ Frame* krs_frame_create_heap(const uint8_t* buffer, const uint16_t received_byte
 }
 
 
-void krs_frame_init(const uint8_t* buffer, const uint16_t received_bytes, Frame* out, const uint16_t out_data_size) {
+void krs_frame_init(const uint8_t* buffer, const uint16_t received_bytes, Frame_t* out, const uint16_t out_data_size) {
     *out = s_create_frame(buffer, received_bytes, out->body, out_data_size);
 }
 
-void krs_frame_destroy(Frame** frame) {
+void krs_frame_destroy(Frame_t** frame) {
     if (*frame != NULL) {
         free((*frame)->body);
         free(*frame);

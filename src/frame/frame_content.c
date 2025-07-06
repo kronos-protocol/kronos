@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-uint16_t krs_frame_get_content(const Frame* frame, uint8_t* out, uint16_t out_data_size) {
+uint16_t krs_frame_get_content(const Frame_t* frame, uint8_t* out, uint16_t out_data_size) {
     if (frame == NULL) {
         //TODO: handle error with errno
         return 0;
