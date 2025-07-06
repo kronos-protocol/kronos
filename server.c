@@ -41,7 +41,7 @@ int main() {
     int client_len = sizeof(client_addr);
 
     while ( 1 ) {
-        uint16_t received = recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&client_addr, &client_len);
+        uint16_t received = recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&client_addr, &client_len); // This leaves one space open for Null Termination of string
 
         if ( received == SOCKET_ERROR ) {
             printf("recvfrom failed: %d\n", WSAGetLastError());
@@ -50,11 +50,13 @@ int main() {
 
         buffer[received] = '\0';
         printf("Received: %s\n", buffer);
-        uint8_t frame_data[received];
-        Frame frame = krs_frame_create(buffer, frame_data, received);
+        uint8_t frame_data[krs_frame_calculate_body_length(received)];
+        Frame_t frame = krs_frame_create(buffer, received, frame_data, received);
+        uint8_t out[received];
+        uint16_t body_size = krs_frame_get_content(&frame, out, received);
         printf("Frame created\n");
 
-        sendto(sockfd, buffer, received, 0, (struct sockaddr*)&client_addr, client_len);
+        sendto(sockfd, out, body_size, 0, (struct sockaddr*)&client_addr, client_len);
     }
 
     closesocket(sockfd);
