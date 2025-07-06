@@ -7,6 +7,9 @@ add_library(kronos STATIC
         src/frame/frame_lifecycle.c
         src/math/bitmask.c
         src/frame/frame_utility.c
+        src/frame/frame_content.c
+        src/math/uint_conversion.c
+        src/connection/server/server_connection_lifecycle.c
 )
 
 add_executable(kronos_preview_server server.c)
