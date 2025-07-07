@@ -5,6 +5,6 @@
 
 typedef struct ServerConnection ServerConnection_t;
 
-ServerConnection_t* krs_client_server_connect(Endpoint_t endpoint, Channel_t channel);
+ServerConnection_t* krs_client_server_connect(Endpoint_t endpoint);
 
 #endif //KRONOS_CLIENT_H
