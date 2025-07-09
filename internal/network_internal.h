@@ -5,12 +5,16 @@
 #include "kronos_server.h"
 #include "kronos_client.h"
 
+// Network stack for Windows
+#include <stdlib.h>
+#include <winsock2.h>
+#include <psdk_inc/_wsadata.h>
 #include <ws2ipdef.h>
 
 struct Endpoint {
     Address_t address;
     UDPSocketRef_t udp_socket_ref;
-    Channel_t max_channel;
+    Channel_t channel;
 };
 
 struct Connection {
