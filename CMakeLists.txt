@@ -10,6 +10,8 @@ add_library(kronos STATIC
         src/frame/frame_content.c
         src/math/uint_conversion.c
         src/connection/server/server_connection_lifecycle.c
+        src/connection/server/server_port_manager_validation.c
+        src/connection/network/address_lifecycle.c
 )
 
 add_executable(kronos_preview_server server.c)
@@ -27,6 +29,10 @@ endif ()
 target_include_directories(kronos PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+)
+
+target_include_directories(kronos PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/internal
 )
 
 target_compile_definitions(kronos PUBLIC
