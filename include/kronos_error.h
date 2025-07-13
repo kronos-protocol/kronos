@@ -1,0 +1,4 @@
+#ifndef KRONOS_ERROR_H
+#define KRONOS_ERROR_H
+
+#endif //KRONOS_ERROR_H
