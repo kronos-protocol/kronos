@@ -17,7 +17,17 @@ enum ChannelType {
     SOCKET_CHANNEL
 };
 
+Address_t krs_network_address_ipv4_create(const char* ip);
+AddressResult_t krs_network_address_ipv4_create_s(const char* ip);
+
+Address_t krs_network_address_ipv6_create(char* ip, uint8_t ip_length);
+
+PortAddress_t krs_network_port_address_create(Port_t port, Address_t address);
+
 #define MAX_CHANNEL_NUMBER 255;
 #define MAX_PORT_NUMBER 65535;
+
+#define MAX_IPV6_LENGTH 46;
+#define MAX_IPV4_LENGTH 16;
 
 #endif //KRONOS_NETWORK_H
