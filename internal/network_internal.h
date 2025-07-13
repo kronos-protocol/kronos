@@ -8,6 +8,7 @@
 // Network stack for Windows
 #include <stdlib.h>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <psdk_inc/_wsadata.h>
 #include <ws2ipdef.h>
 

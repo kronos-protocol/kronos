@@ -1,8 +1,8 @@
 #include "kronos_math.h"
 
 
-#include <../include/kronos.h>
-#include <../internal/kronos_internal.h>
+#include "kronos.h"
+#include "kronos_internal.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
