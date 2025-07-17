@@ -1,16 +1,37 @@
 #ifndef KRONOS_NETWORK_H
 #define KRONOS_NETWORK_H
 #include <stdint.h>
-#include <winsock2.h>
-#include <ws2ipdef.h>
+#include <stdbool.h>
 
-typedef SOCKET UDPSocketRef_t;
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "Ws2_32.lib")  // Link Winsock lib in MSVC
+    typedef SOCKET UDPSocketRef_t;
+#else
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #include <netdb.h>
+    #include <errno.h>
+    typedef int UDPSocketRef_t;
+#endif
+
 typedef struct Endpoint Endpoint_t;
 typedef uint8_t Channel_t;
 typedef struct Connection Connection_t;
 typedef struct sockaddr_in6 PortAddress_t;
 typedef struct in6_addr Address_t;
+typedef struct AddressResult AddressResult_t;
 typedef uint16_t Port_t;
+
+struct AddressResult {
+    Address_t address;
+    bool valid;
+    int error_code;
+};
 
 enum ChannelType {
     MESSAGE_CHANNEL,
