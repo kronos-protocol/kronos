@@ -12,6 +12,7 @@ add_library(kronos STATIC
         src/connection/server/server_connection_lifecycle.c
         src/connection/server/server_port_manager_validation.c
         src/connection/network/address_lifecycle.c
+        src/lib/port_table_lifecycle.c
 )
 
 add_executable(kronos_preview_server server.c)
