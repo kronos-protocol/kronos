@@ -34,8 +34,8 @@ ServerPortManager_t* krs_server_port_manager_create(const Address_t default_addr
 }
 
 void krs_server_port_manager_port_add(ServerPortManager_t* server_port_manager, Port_t port) {
-    if (!krs_server_port_manager_validate(server_port_manager)) {
-        //TODO: handle errors
+    if (!krs_server_port_manager_validate(server_port_manager)) { //TODO: handle errors
+
     }
 
     PortAddress_t port_address;
