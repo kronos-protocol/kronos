@@ -7,13 +7,28 @@ typedef struct PortLink PortLink_t;
 
 struct PortTable {
     PortLink_t** table;
-    size_t ports_size;
-    size_t ports_length;
+    size_t table_size;
+    uint32_t total_entries;
 };
 
 struct PortLink {
     Port_t* port;
     PortLink_t* next;
 };
+
+void port_table_rebuild(PortTable_t* port_table);
+
+#define HASH_MULTIPLIER 2654435761u
+
+static const uint32_t PRIME_SIZES[] = {
+    17u, 31u, 67u, 131u, 257u, 521u, 1031u, 2053u,
+    4099u, 8209u, 16411u, 32771u, 65537u
+};
+
+#define PRIME_SIZES_COUNT (sizeof(PRIME_SIZES) / sizeof(PRIME_SIZES[0]))
+
+#define MAX_LOAD_FACTOR 1.5
+
+#define HASH_PORT_INDEX(port, size) ((port) * 2654435761u % (size))
 
 #endif //PORT_TABLE_INTERNAL_H
