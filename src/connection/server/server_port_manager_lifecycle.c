@@ -4,7 +4,7 @@
 #include "../internal/server_internal.h"
 
 
-
+// ALERT: Legacy code used for reference
 Endpoint_t* krs_endpoint_setup(Address_t address, Channel_t max_channel) {
     Endpoint_t * endpoint = malloc(sizeof(Endpoint_t));
     endpoint->address = address;
