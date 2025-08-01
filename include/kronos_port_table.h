@@ -2,6 +2,7 @@
 #define KRONOS_PORT_TABLE_H
 
 #include "kronos_network.h"
+#include <stdlib.h>
 
 typedef struct PortTable PortTable_t;
 
