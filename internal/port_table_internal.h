@@ -12,7 +12,7 @@ struct PortTable {
 };
 
 struct PortLink {
-    Port_t* port;
+    Port_t port;
     PortLink_t* next;
 };
 
