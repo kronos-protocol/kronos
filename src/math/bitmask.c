@@ -1,7 +1,5 @@
 #include "../include/kronos_math.h"
 
-#include <winsock2.h>
-
 bool krs_math_bitmask_get_flag(const uint8_t flag_pos, const uint8_t* data, const uint8_t length) {
     if (flag_pos  >= length * 8) {
         return false;
