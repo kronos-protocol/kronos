@@ -2,17 +2,34 @@
 #include "port_table_internal.h"
 
 void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port) {
-    if (port_table->total_entries / port_table->table_size > MAX_LOAD_FACTOR) {
+    if ((double)port_table->total_entries / port_table->table_size > MAX_LOAD_FACTOR) {
         port_table_rebuild(port_table);
         krs_lib_port_table_insert(port_table, port);
         return;
     }
 
     size_t index = HASH_PORT_INDEX(port, port_table->table_size);
+    PortLink_t* port_link = malloc(sizeof(PortLink_t));
+    port_link->port = port;
+    port_link->next = NULL;
+
+    port_table->total_entries++;
 
     if (port_table->table[index] == NULL) {
-
+        port_table->table[index] = port_link;
     } else {
-
+        PortLink_t* current_port_link = port_table->table[index];
+        while (current_port_link->next != NULL) {
+            if (current_port_link->port == port) {
+                //TODO: handle duplicate port error
+                //return;
+            }
+            current_port_link = current_port_link->next;
+        }
+        current_port_link->next = port_link;
     }
+}
+
+void port_table_rebuild(PortTable_t* port_table) {
+
 }
