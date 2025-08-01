@@ -8,7 +8,6 @@ PortTable_t* krs_lib_port_table_create() {
 
     port_table->table = port_link;
     port_table->table_size = initial_size;
-    port_table->table_length = 0;
 
     return port_table;
 }
