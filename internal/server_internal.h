@@ -1,12 +1,12 @@
 #ifndef SERVER_INTERNAL_H
 #define SERVER_INTERNAL_H
 #include "network_internal.h"
+#include <kronos_port_table.h>
 
 typedef struct ServerPort ServerPort_t;
 
 struct ServerPortManager {
-    ServerPort_t* open_ports;
-    Port_t open_ports_length;
+    PortTable_t* open_ports;
     Address_t default_address;
     Channel_t default_max_channel;
 };

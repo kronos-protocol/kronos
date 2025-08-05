@@ -38,8 +38,7 @@ void krs_server_port_manager_port_add(ServerPortManager_t* server_port_manager, 
 
     }
 
-    PortAddress_t port_address;
-
+    krs_lib_port_table_insert(server_port_manager->open_ports, port);
 }
 
 
