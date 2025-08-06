@@ -2,6 +2,7 @@
 #define SERVER_INTERNAL_H
 #include "network_internal.h"
 #include <kronos_port_table.h>
+#include <time.h>
 
 typedef struct ServerPort ServerPort_t;
 
@@ -17,7 +18,17 @@ struct ServerPort {
 };
 
 struct ClientConnection {
+    struct tm timestamp_opened;
+};
 
+struct SocketManager {
+    UDPSocketRef_t udp_socket_ref;
+    ChannelHandler_t* channel_handlers;
+};
+
+struct ChannelHandler {
+    ClientConnection_t* client_connection;
+    enum ChannelType channel_type;
 };
 
 boolean krs_server_port_manager_validate(ServerPortManager_t* server_port_manager);
