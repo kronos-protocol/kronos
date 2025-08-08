@@ -5,9 +5,10 @@
 #include <time.h>
 
 typedef struct ServerPort ServerPort_t;
+typedef struct ClientConnectionInfo ClientConnectionInfo_t;
 
 struct ServerPortManager {
-    PortTable_t* open_ports;
+    PortTable_t* port_table;
     Address_t default_address;
     Channel_t default_max_channel;
 };
@@ -17,20 +18,25 @@ struct ServerPort {
     Channel_t max_channel;
 };
 
-struct ClientConnection {
+struct ClientConnectionInfo {
     struct tm timestamp_opened;
 };
 
 struct SocketManager {
     UDPSocketRef_t udp_socket_ref;
-    ChannelHandler_t* channel_handlers;
+    ChannelHandler_t channel_handlers[];
 };
 
 struct ChannelHandler {
-    ClientConnection_t* client_connection;
+    ClientConnectionInfo_t client_connection_info;
     enum ChannelType channel_type;
 };
 
-boolean krs_server_port_manager_validate(ServerPortManager_t* server_port_manager);
+SocketManager_t* krs_server_socket_manager_create();
+
+ChannelHandler_t* krs_server_channel_handler_create();
+ChannelHandler_t krs_channel_handler_create_st();
+
+bool krs_server_port_manager_validate(ServerPortManager_t* server_port_manager);
 
 #endif //SERVER_INTERNAL_H
