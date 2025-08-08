@@ -28,6 +28,8 @@ typedef struct in6_addr Address_t;
 typedef struct AddressResult AddressResult_t;
 typedef uint16_t Port_t;
 
+typedef enum ChannelType ChannelType_e;
+
 struct AddressResult {
     Address_t address;
     bool valid;
@@ -35,6 +37,7 @@ struct AddressResult {
 };
 
 enum ChannelType {
+    OPEN_CHANNEL,
     MESSAGE_CHANNEL,
     SOCKET_CHANNEL
 };
