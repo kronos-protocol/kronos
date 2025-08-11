@@ -23,10 +23,9 @@ Endpoint_t* krs_endpoint_setup(Address_t address, Channel_t max_channel) {
 
 ServerPortManager_t* krs_server_port_manager_create(const Address_t default_address) {
     ServerPortManager_t* server_port_manager = malloc(sizeof(ServerPortManager_t));
-    ServerPort_t* open_ports = malloc(255 * sizeof(ServerPort_t));
+    PortTable_t* port_table = krs_lib_port_table_create();
 
-    server_port_manager->open_ports = open_ports;
-    server_port_manager->open_ports_length = 0;
+    server_port_manager->port_table = port_table;
     server_port_manager->default_address = default_address;
     server_port_manager->default_max_channel = 255; // TODO: let this be changed for now max Channel is always uint8_t max value
 
@@ -38,7 +37,7 @@ void krs_server_port_manager_port_add(ServerPortManager_t* server_port_manager, 
 
     }
 
-    krs_lib_port_table_insert(server_port_manager->open_ports, port);
+    krs_lib_port_table_insert(server_port_manager->port_table, port);
 }
 
 
