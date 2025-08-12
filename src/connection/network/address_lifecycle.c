@@ -13,7 +13,6 @@ Address_t krs_network_address_ipv4_create_len(const char* ip, const uint8_t ip_l
     }
 
     Address_t result;
-
     inet_pton(AF_INET6, ip, &result);
-
+    return result;
 }
