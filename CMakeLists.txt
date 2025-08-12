@@ -16,11 +16,8 @@ add_library(kronos STATIC
         src/lib/port_table/port_table_manipulation.c
 )
 
-add_executable(kronos_preview_server server.c)
-add_executable(kronos_preview_client client.c)
-add_executable(kronos_test test_app.c)
-
-target_link_libraries(kronos_test PRIVATE kronos ws2_32)
+add_executable(port_table_test port_table_test.c)
+target_link_libraries(port_table_test PRIVATE kronos)
 
 if (WIN32)
     target_link_libraries(kronos_preview_server PRIVATE kronos ws2_32)
@@ -33,7 +30,7 @@ target_include_directories(kronos PUBLIC
         $<INSTALL_INTERFACE:include>
 )
 
-target_include_directories(kronos PRIVATE
+target_include_directories(kronos PUBLIC # change this later to private once we compile the library seperatly
         ${CMAKE_CURRENT_SOURCE_DIR}/internal
 )
 
