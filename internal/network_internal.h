@@ -11,8 +11,7 @@ struct Endpoint {
 };
 
 struct Connection {
-    ClientConnection_t* client_connection;
-    ServerConnection_t* server_connection;
+    //TODO: add universal connection information in this struct
 };
 
 #endif //NETWORK_INTERNAL_H
