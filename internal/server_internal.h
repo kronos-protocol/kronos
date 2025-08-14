@@ -22,12 +22,12 @@ struct ClientConnectionInfo {
     struct tm timestamp_opened;
 };
 
-struct SocketManager {
+struct SocketHandler {
     UDPSocketRef_t udp_socket_ref;
     ChannelHandler_t channel_handlers[];
 };
 
-struct ChannelHandler {
+struct ChannelManager {
     ClientConnectionInfo_t client_connection_info;
     enum ChannelType channel_type;
 };
