@@ -27,7 +27,7 @@ struct SocketHandler {
     ChannelHandler_t channel_handlers[];
 };
 
-struct ChannelManager {
+struct ChannelHandler {
     ClientConnectionInfo_t client_connection_info;
     enum ChannelType channel_type;
 };
