@@ -1,13 +1,7 @@
 #include "kronos_port_table.h"
 #include "port_table_internal.h"
 
-void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port) {
-    if ((double)port_table->total_entries / port_table->table_size > MAX_LOAD_FACTOR) {
-        port_table_rebuild(port_table);
-        krs_lib_port_table_insert(port_table, port);
-        return;
-    }
-
+boolean port_table_insert(PortTable_t* port_table, Port_t port) {
     size_t index = HASH_PORT_INDEX(port, port_table->table_size);
     PortLink_t* port_link = malloc(sizeof(PortLink_t));
     port_link->port = port;
@@ -21,13 +15,23 @@ void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port) {
         PortLink_t* current_port_link = port_table->table[index];
         while (current_port_link->next != NULL) {
             if (current_port_link->port == port) {
-                //TODO: handle duplicate port error
-                //return;
+                return false;
             }
             current_port_link = current_port_link->next;
         }
         current_port_link->next = port_link;
     }
+    return true;
+}
+
+void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port) {
+    if ((double)port_table->total_entries / port_table->table_size > MAX_LOAD_FACTOR) {
+        port_table_rebuild(port_table);
+        port_table_insert(port_table, port);
+        return;
+    }
+
+    port_table_insert(port_table, port);
 }
 
 void port_table_rebuild(PortTable_t* port_table) {
