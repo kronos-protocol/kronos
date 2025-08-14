@@ -3,7 +3,7 @@
 #include "kronos_network.h"
 
 typedef struct ServerPortManager ServerPortManager_t;
-typedef struct SocketManager SocketManager_t;
+typedef struct SocketHandler SocketHandler_t;
 typedef struct ChannelHandler ChannelHandler_t;
 
 ServerPortManager_t* krs_server_port_manager_create(Address_t default_address);
