@@ -2,17 +2,20 @@
 #define PORT_TABLE_INTERNAL_H
 
 #include "kronos_port_table.h"
+#include "kronos_server.h"
 
 typedef struct PortLink PortLink_t;
 
 struct PortTable {
     PortLink_t** table;
     size_t table_size;
+    uint8_t prime_size_index;
     uint32_t total_entries;
 };
 
 struct PortLink {
     Port_t port;
+    SocketHandler_t* socket_handler;
     PortLink_t* next;
 };
 
