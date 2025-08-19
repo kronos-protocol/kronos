@@ -1,7 +1,7 @@
 #include "kronos_port_table.h"
 #include "port_table_internal.h"
 
-boolean port_table_insert(PortTable_t* port_table, Port_t port) {
+bool port_table_insert(PortTable_t* port_table, Port_t port) {
     size_t index = HASH_PORT_INDEX(port, port_table->table_size);
     PortLink_t* port_link = malloc(sizeof(PortLink_t));
     port_link->port = port;

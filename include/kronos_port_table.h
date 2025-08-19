@@ -3,6 +3,7 @@
 
 #include "kronos_network.h"
 #include <stdlib.h>
+#include <stdbool.h>
 
 typedef struct PortTable PortTable_t;
 typedef struct PortTableInsertResult PortTableInsertResult_t;
