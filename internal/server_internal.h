@@ -24,7 +24,7 @@ struct ClientConnectionInfo {
 
 struct SocketHandler {
     UDPSocketRef_t udp_socket_ref;
-    ChannelHandler_t channel_handlers[];
+    ChannelHandler_t channel_handlers[]; // Can be changed in future to have variable size
 };
 
 struct ChannelHandler {
@@ -32,7 +32,7 @@ struct ChannelHandler {
     enum ChannelType channel_type;
 };
 
-SocketManager_t* krs_server_socket_manager_create();
+SocketHandler_t* krs_server_socket_handler_create();
 
 ChannelHandler_t* krs_server_channel_handler_create();
 ChannelHandler_t krs_channel_handler_create_st();
