@@ -35,5 +35,11 @@ void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port) {
 }
 
 void port_table_rebuild(PortTable_t* port_table) {
+    uint8_t next_index = port_table->prime_size_index + 1;
+    if (next_index >= PRIME_SIZES_COUNT) {
+        return;
+    }
+    uint32_t new_table_size = PRIME_SIZES[next_index];
+    PortLink_t** new_table = malloc(new_table_size * sizeof(PortLink_t*));
 
 }
