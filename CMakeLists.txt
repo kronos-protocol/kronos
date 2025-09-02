@@ -20,8 +20,8 @@ add_executable(port_table_test port_table_test.c)
 target_link_libraries(port_table_test PRIVATE kronos)
 
 if (WIN32)
-    target_link_libraries(kronos_preview_server PRIVATE kronos ws2_32)
-    target_link_libraries(kronos_preview_client PRIVATE kronos ws2_32)
+    # target_link_libraries(kronos_preview_server PRIVATE kronos ws2_32)
+    # target_link_libraries(kronos_preview_client PRIVATE kronos ws2_32)
 endif ()
 
 
