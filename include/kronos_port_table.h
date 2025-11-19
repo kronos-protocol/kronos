@@ -18,4 +18,6 @@ PortTable_t* krs_lib_port_table_create();
 void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port);
 PortTableInsertResult_t krs_lib_port_table_insert_s(PortTable_t* port_table, Port_t port);
 
+void krs_lib_port_table_destroy(PortTable_t** port_table);
+
 #endif //KRONOS_PORT_TABLE_H
