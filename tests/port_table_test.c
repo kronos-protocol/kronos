@@ -21,5 +21,5 @@ void test_port_table_creation(void) {
         TEST_ASSERT_NULL(pt->table[i]);
     }
 
-    krs_lib_port_table_destroy(pt);
+    krs_lib_port_table_destroy(&pt);
 }
