@@ -37,6 +37,10 @@ void test_port_table_insert(void) {
     krs_lib_port_table_insert(pt, port);
 
     TEST_ASSERT_NOT_NULL(pt->table[expected_index]);
+    TEST_ASSERT_EQUAL_UINT32(1, pt->total_entries);
     TEST_ASSERT_EQUAL(pt->table[expected_index]->port, port);
     TEST_ASSERT_NULL(pt->table[expected_index]->next);
+
+    krs_lib_port_table_insert(pt, port);
+    TEST_ASSERT_EQUAL_UINT32(1, pt->total_entries);
 }
