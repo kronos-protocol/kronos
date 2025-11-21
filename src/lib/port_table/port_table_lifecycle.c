@@ -17,3 +17,23 @@ PortTable_t* krs_lib_port_table_create(void) {
     pt->prime_size_index = 0;
     return pt;
 }
+
+void krs_lib_port_table_destroy(PortTable_t** ptp) {
+    if (!ptp || !*ptp) return;
+
+    PortTable_t* pt = *ptp;
+
+    for (int i = 0; i < pt->table_size; i++) {
+        PortLink_t* link = pt->table[i];
+        while (link != NULL) {
+            PortLink_t* next = link->next;
+            free(link->socket_handler); //TODO: use function for this once socket handlers are implemented
+            free(link);
+            link = next;
+        }
+    }
+
+    free(pt->table);
+    free(pt);
+    *ptp = NULL;
+}
