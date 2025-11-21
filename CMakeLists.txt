@@ -39,3 +39,17 @@ target_compile_definitions(kronos PUBLIC
         KRONOS_VERSION_MINOR=${PROJECT_VERSION_MINOR}
         KRONOS_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
+
+add_library(unity STATIC unity/unity.c)
+target_include_directories(unity PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/unity)
+
+enable_testing()
+
+add_executable(kronos_unit_tests
+        tests/main_test.c
+        tests/port_table_test.c
+)
+
+target_link_libraries(kronos_unit_tests PRIVATE kronos unity)
+
+add_test(NAME kronos_unit_tests COMMAND kronos_unit_tests)
