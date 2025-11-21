@@ -32,6 +32,6 @@ static const uint32_t PRIME_SIZES[] = {
 
 #define MAX_LOAD_FACTOR 1.5
 
-#define HASH_PORT_INDEX(port, size) ((port) * 2654435761u % (size))
+#define HASH_PORT_INDEX(port, size) ((port) * HASH_MULTIPLIER % (size))
 
 #endif //PORT_TABLE_INTERNAL_H
