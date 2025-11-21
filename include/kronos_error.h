@@ -3,10 +3,10 @@
 
 #include <stdbool.h>
 
-typedef struct OperationResult OperationResult_t;
+typedef struct VoidResult VoidResult_t;
 typedef enum KronosError KronosError_e;
 
-struct OperationResult {
+struct VoidResult {
     bool valid;
     int error_code;
 };
