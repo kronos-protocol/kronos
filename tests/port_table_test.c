@@ -23,3 +23,20 @@ void test_port_table_creation(void) {
 
     krs_lib_port_table_destroy(&pt);
 }
+
+void test_port_table_insert(void) {
+    PortTable_t* pt = krs_lib_port_table_create();
+    TEST_ASSERT_NOT_NULL(pt);
+    TEST_ASSERT_NOT_NULL(pt->table);
+
+    Port_t port = 10;
+    uint32_t expected_index = HASH_PORT_INDEX(port, pt->table_size);
+
+    TEST_ASSERT_NULL(pt->table[expected_index]);
+
+    krs_lib_port_table_insert(pt, port);
+
+    TEST_ASSERT_NOT_NULL(pt->table[expected_index]);
+    TEST_ASSERT_EQUAL(pt->table[expected_index]->port, port);
+    TEST_ASSERT_NULL(pt->table[expected_index]->next);
+}
