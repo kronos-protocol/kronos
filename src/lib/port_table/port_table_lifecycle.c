@@ -1,21 +1,71 @@
 #include "kronos_port_table.h"
 #include "port_table_internal.h"
 
-PortTable_t* krs_lib_port_table_create(void) {
+static PortTable_t* port_table_alloc(void) {
     PortTable_t* pt = malloc(sizeof(PortTable_t));
+    if (pt) {
+        pt->total_entries = 0;
+        pt->prime_size_index = 0;
+        pt->table_size = 0;
+    }
+    return pt;
+}
+
+static void port_links_alloc(PortTable_t* pt) {
+    const uint32_t initial_size = PRIME_SIZES[0];
+    PortLink_t** port_links = calloc(initial_size, sizeof(PortLink_t*));
+    if (port_links) {
+        pt->table = port_links;
+        pt->table_size = initial_size;
+    } else {
+        pt->table = NULL;
+    }
+}
+
+static PortTable_t* port_table_create(void) {
+    PortTable_t* pt = port_table_alloc();
     if (!pt) return NULL;
 
-    uint32_t initial_size = PRIME_SIZES[0];
-    pt->table = calloc(initial_size, sizeof(PortLink_t*));
+    port_links_alloc(pt);
+
     if (!pt->table) {
         free(pt);
         return NULL;
     }
 
-    pt->table_size = initial_size;
-    pt->total_entries = 0;
-    pt->prime_size_index = 0;
     return pt;
+}
+
+void port_table_destroy_table(PortLink_t** port_link) {
+
+}
+
+
+PortTable_t* krs_lib_port_table_create(void) {
+    return port_table_create();
+}
+
+PortTableCreate_r krs_lib_port_table_create_s(void) {
+    PortTableCreate_r result;
+
+    PortTable_t* pt = port_table_create();
+
+    if (!pt) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_MEMORY_ALLOCATION, "Could not allocate memory for PortTable_t");
+        return result;
+    }
+
+    port_links_alloc(pt);
+
+    if (!pt->table) {
+        free(pt);
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_MEMORY_ALLOCATION, "Could not allocate memory for PortLink_t");
+        return result;
+    }
+
+    result.base = krs_lib_error_result_base_suc();
+    result.port_table = pt;
+    return result;
 }
 
 void krs_lib_port_table_destroy(PortTable_t** ptp) {
@@ -27,7 +77,7 @@ void krs_lib_port_table_destroy(PortTable_t** ptp) {
         PortLink_t* link = pt->table[i];
         while (link != NULL) {
             PortLink_t* next = link->next;
-            free(link->socket_handler); //TODO: use function for this once socket handlers are implemented
+            krs_server_socket_handler_destroy(&link->socket_handler);
             free(link);
             link = next;
         }
