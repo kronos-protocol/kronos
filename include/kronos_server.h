@@ -11,4 +11,6 @@ ServerPortManager_t* krs_server_port_manager_create(Address_t default_address);
 void krs_server_port_manager_port_add(ServerPortManager_t* server_port_manager, Port_t port);
 void krs_server_port_manager_port_add_with_address(ServerPortManager_t* server_port_manager, Port_t port, Address_t address);
 
+void krs_server_socket_handler_destroy(SocketHandler_t** socket_handler);
+
 #endif //KRONOS_SERVER_H
