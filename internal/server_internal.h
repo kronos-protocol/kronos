@@ -23,7 +23,7 @@ struct ClientConnection {
 
 struct SocketHandler {
     UDPSocketRef_t udp_socket_ref;
-    ChannelHandler_t channel_handlers[]; // Can be changed in future to have variable size
+    //ChannelHandler_t channel_handlers[]; Can be changed in future to have variable size
 };
 
 struct ChannelHandler {
