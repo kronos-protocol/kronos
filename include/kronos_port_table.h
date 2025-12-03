@@ -11,7 +11,7 @@
 typedef struct PortTable PortTable_t;
 typedef struct PortTableCreateResult PortTableCreate_r;
 
-typedef void (*socket_handler_destroy_f) (SocketHandler_t** socket_handler);
+typedef void (*socket_handler_destroy_f) (UdpSocketHandler_t** socket_handler);
 
 struct PortTableCreateResult {
     KronosResult_b base;
@@ -21,7 +21,7 @@ struct PortTableCreateResult {
 PortTable_t* krs_lib_port_table_create();
 PortTableCreate_r krs_lib_port_table_create_s();
 
-void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port);
+void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port, UdpSocketHandler_t* udp_socket_handler);
 Void_r krs_lib_port_table_insert_s(PortTable_t* port_table, Port_t port);
 
 void krs_lib_port_table_destroy(PortTable_t** port_table);
