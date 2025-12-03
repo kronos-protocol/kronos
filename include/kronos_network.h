@@ -51,6 +51,8 @@ Address_t krs_network_address_ipv6_create(char* ip, uint8_t ip_length);
 
 PortAddress_t krs_network_port_address_create(Port_t port, Address_t address);
 
+UDPSocketRef_t krs_network_udp_socket_ref_create(PortAddress_t port_address);
+
 #define MAX_CHANNEL_NUMBER 255
 #define MAX_PORT_NUMBER 65535
 
