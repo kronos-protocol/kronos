@@ -14,8 +14,8 @@ struct PortTable {
 };
 
 struct PortLink {
+    UdpSocketHandler_t* socket_handler;
     Port_t port;
-    SocketHandler_t* socket_handler;
     PortLink_t* next;
 };
 
