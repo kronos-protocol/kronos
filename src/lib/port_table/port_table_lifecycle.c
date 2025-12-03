@@ -14,6 +14,7 @@ static PortTable_t* port_table_alloc(void) {
 static void port_links_alloc(PortTable_t* pt) {
     const uint32_t initial_size = PRIME_SIZES[0];
     PortLink_t** port_links = calloc(initial_size, sizeof(PortLink_t*));
+
     if (port_links) {
         pt->table = port_links;
         pt->table_size = initial_size;
@@ -34,10 +35,6 @@ static PortTable_t* port_table_create(void) {
     }
 
     return pt;
-}
-
-void port_table_destroy_table(PortLink_t** port_link) {
-
 }
 
 
@@ -77,7 +74,7 @@ void krs_lib_port_table_destroy(PortTable_t** ptp) {
         PortLink_t* link = pt->table[i];
         while (link != NULL) {
             PortLink_t* next = link->next;
-            krs_server_socket_handler_destroy(&link->socket_handler);
+            krs_server_udp_socket_handler_destroy(&link->socket_handler);
             free(link);
             link = next;
         }
