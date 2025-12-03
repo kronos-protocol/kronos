@@ -3,6 +3,11 @@ project(kronos VERSION 1.0.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-O0 -g --coverage)
+    add_link_options(--coverage)
+endif()
+
 add_library(kronos STATIC
         src/frame/frame_lifecycle.c
         src/math/bitmask.c
@@ -24,13 +29,12 @@ if (WIN32)
     # target_link_libraries(kronos_preview_client PRIVATE kronos ws2_32)
 endif ()
 
-
 target_include_directories(kronos PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 
-target_include_directories(kronos PUBLIC # change this later to private once we compile the library seperatly
+target_include_directories(kronos PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/internal
 )
 
@@ -57,37 +61,59 @@ set(MOCK_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/mocks)
 file(MAKE_DIRECTORY ${MOCK_OUTPUT_DIR})
 set(GENERATED_MOCKS "")
 
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/cmock_config.yml
-        ":cmock:
-  :mock_path: '${MOCK_OUTPUT_DIR}'
-  :mock_prefix: 'mock_'
-  :includes:
-    - unity.h
-    - server_internal.h
-  :plugins:
-    - :ignore
-    - :callback
-    - :return_thru_ptr
-  :treat_as:
-    uint8_t: HEX8
-    uint16_t: HEX16
-    uint32_t: HEX32
-  :strippables:
-    - '(?:EXTERN_C_START|EXTERN_C_END)'
-")
+set(MOCK_FORCE_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/mock_force_include.h)
+set(MOCK_CONTENT "// Auto-generated - force include all internal headers\n")
+
+file(GLOB_RECURSE INTERNAL_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/internal/*.h")
+foreach(h ${INTERNAL_HEADERS})
+    file(RELATIVE_PATH rel_path "${CMAKE_CURRENT_SOURCE_DIR}/internal" "${h}")
+    string(APPEND MOCK_CONTENT "#include \"${rel_path}\"\n")
+endforeach()
+
+if(EXISTS "${MOCK_FORCE_INCLUDE}")
+    file(READ "${MOCK_FORCE_INCLUDE}" OLD_CONTENT)
+else()
+    set(OLD_CONTENT "")
+endif()
+
+if(NOT "${OLD_CONTENT}" STREQUAL "${MOCK_CONTENT}")
+    file(WRITE "${MOCK_FORCE_INCLUDE}" "${MOCK_CONTENT}")
+endif()
+
+set(CMOCK_CONFIG ${CMAKE_CURRENT_BINARY_DIR}/cmock_config.yml)
+file(WRITE ${CMOCK_CONFIG} "")
+file(APPEND ${CMOCK_CONFIG} ":cmock:\n")
+file(APPEND ${CMOCK_CONFIG} "  :mock_path: '${MOCK_OUTPUT_DIR}'\n")
+file(APPEND ${CMOCK_CONFIG} "  :mock_prefix: 'mock_'\n")
+file(APPEND ${CMOCK_CONFIG} "  :plugins:\n")
+file(APPEND ${CMOCK_CONFIG} "  - :ignore\n")
+file(APPEND ${CMOCK_CONFIG} "  - :callback\n")
+file(APPEND ${CMOCK_CONFIG} "  - :return_thru_ptr\n")
+file(APPEND ${CMOCK_CONFIG} "  :treat_as:\n")
+file(APPEND ${CMOCK_CONFIG} "    uint8_t: HEX8\n")
+file(APPEND ${CMOCK_CONFIG} "    uint16_t: HEX16\n")
+file(APPEND ${CMOCK_CONFIG} "    uint32_t: HEX32\n")
+file(APPEND ${CMOCK_CONFIG} "  :strippables:\n")
+file(APPEND ${CMOCK_CONFIG} "  - '(?:EXTERN_C_START|EXTERN_C_END)'\n")
 
 function(add_mock_for_header HEADER_FILE)
     get_filename_component(HEADER_NAME ${HEADER_FILE} NAME_WE)
     set(MOCK_OUTPUT ${MOCK_OUTPUT_DIR}/mock_${HEADER_NAME}.c)
 
-    # Get absolute paths (required when changing working directory)
     get_filename_component(HEADER_ABS "${HEADER_FILE}" ABSOLUTE)
-    get_filename_component(CONFIG_ABS "${CMAKE_CURRENT_BINARY_DIR}/cmock_config.yml" ABSOLUTE)
+    get_filename_component(CONFIG_ABS "${CMOCK_CONFIG}" ABSOLUTE)
+
+    if(WIN32)
+        set(PATH_SEP ";")
+    else()
+        set(PATH_SEP ":")
+    endif()
 
     add_custom_command(
             OUTPUT ${MOCK_OUTPUT}
-            COMMAND ruby cmock.rb -o${CONFIG_ABS} ${HEADER_ABS}
-            DEPENDS ${HEADER_FILE}
+            COMMAND ${CMAKE_COMMAND} -E env "C_INCLUDE_PATH=${CMAKE_CURRENT_SOURCE_DIR}/internal${PATH_SEP}${CMAKE_CURRENT_SOURCE_DIR}/include"
+                    ruby cmock.rb -o${CONFIG_ABS} ${HEADER_ABS}
+            DEPENDS ${HEADER_FILE} ${CMOCK_CONFIG}
             COMMENT "Generating mock for ${HEADER_NAME}"
             WORKING_DIRECTORY ${CMOCK_DIR}/lib
     )
@@ -95,15 +121,25 @@ function(add_mock_for_header HEADER_FILE)
     set(GENERATED_MOCKS ${GENERATED_MOCKS} ${MOCK_OUTPUT} PARENT_SCOPE)
 endfunction()
 
-add_mock_for_header(${CMAKE_CURRENT_SOURCE_DIR}/include/kronos_server.h)
+file(GLOB_RECURSE PUBLIC_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
+foreach(header ${PUBLIC_HEADERS})
+    add_mock_for_header(${header})
+endforeach()
 
 add_library(kronos_mocks STATIC ${GENERATED_MOCKS})
+
 target_include_directories(kronos_mocks PUBLIC
         ${MOCK_OUTPUT_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/internal
 )
+
 target_link_libraries(kronos_mocks PUBLIC cmock unity)
+
+target_compile_options(kronos_mocks PRIVATE
+    $<$<C_COMPILER_ID:MSVC>:/FI${MOCK_FORCE_INCLUDE}>
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-include${MOCK_FORCE_INCLUDE}>
+)
 
 add_library(malloc_wrapper STATIC test/mocks/malloc_wrapper.c)
 target_include_directories(malloc_wrapper PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/test/mocks)
