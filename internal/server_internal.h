@@ -4,7 +4,6 @@
 #include <kronos_port_table.h>
 #include <time.h>
 
-typedef struct ServerPort ServerPort_t;
 
 struct ServerPortManager {
     PortTable_t* port_table;
@@ -12,26 +11,19 @@ struct ServerPortManager {
     Channel_t default_max_channel;
 };
 
-struct ServerPort {
-    Address_t address;
-    Channel_t max_channel;
-};
-
 struct ClientConnection {
     struct tm timestamp_opened;
 };
 
-struct SocketHandler {
+struct UdpSocketHandler {
     UDPSocketRef_t udp_socket_ref;
-    //ChannelHandler_t channel_handlers[]; Can be changed in future to have variable size
+    ChannelType_e channel_types[MAX_CHANNEL_NUMBER];
 };
 
-struct ChannelHandler {
-    ClientConnection_t client_connection;
-    enum ChannelType channel_type;
+// Can be used in future in UdpSocketHandler instead of a raw ChannelType_e array
+struct ChannelDescriptor {
+    ChannelType_e channel_type;
 };
-
-SocketHandler_t* krs_server_socket_handler_create();
 
 ChannelHandler_t* krs_server_channel_handler_create();
 ChannelHandler_t krs_server_channel_handler_create_st();
