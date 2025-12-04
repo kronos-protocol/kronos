@@ -160,7 +160,10 @@ target_link_options(kronos_unit_tests PRIVATE
         -Wl,--wrap=calloc
         -Wl,--wrap=free
         -Wl,--wrap=realloc
+        --coverage
 )
+
+target_compile_options(kronos_unit_tests PRIVATE --coverage)
 
 target_include_directories(kronos_unit_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/test
