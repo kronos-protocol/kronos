@@ -30,6 +30,14 @@ struct VoidResult {
 
 
 static inline
+void krs_lib_error_result_base_cleanup(KronosResult_b krb) {
+    if (krb.free_error_message && krb.error_message != NULL) {
+        free((char*) krb.error_message);
+    }
+}
+
+
+static inline
 KronosResult_b krs_lib_error_result_base_suc() {
     KronosResult_b result;
     result.valid = true;
