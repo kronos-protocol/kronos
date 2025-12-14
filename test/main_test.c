@@ -1,6 +1,4 @@
 #include "malloc_wrapper.h"
-
-
 #include <unity.h>
 
 void setUp() {
@@ -13,8 +11,10 @@ void tearDown() {
 
 void test_port_table_internal_prime_sizes_exist(void);
 void test_port_table_creation(void);
+void test_port_table_creation_s(void);
 void test_port_table_insert(void);
 void test_port_table_destroy(void);
+
 
 
 void main() {
@@ -22,6 +22,7 @@ void main() {
 
     RUN_TEST(test_port_table_internal_prime_sizes_exist);
     RUN_TEST(test_port_table_creation);
+    RUN_TEST(test_port_table_creation_s);
     RUN_TEST(test_port_table_insert);
     RUN_TEST(test_port_table_destroy);
 
