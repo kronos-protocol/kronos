@@ -26,7 +26,6 @@ struct ChannelDescriptor {
 };
 
 ChannelHandler_t* krs_server_channel_handler_create();
-ChannelHandler_t krs_server_channel_handler_create_st();
 
 bool krs_server_port_manager_validate(ServerPortManager_t* server_port_manager);
 
