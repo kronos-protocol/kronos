@@ -44,6 +44,7 @@ PortTable_t* krs_lib_port_table_create(void) {
 
 PortTableCreate_r krs_lib_port_table_create_s(void) {
     PortTableCreate_r result;
+    result.port_table = NULL;
 
     PortTable_t* pt = port_table_create();
 
