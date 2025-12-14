@@ -21,6 +21,8 @@ struct PortLink {
 
 void port_table_rebuild(PortTable_t* port_table);
 
+int hash_port_index(int port, int size);
+
 #define HASH_MULTIPLIER 2654435761u
 
 static const uint32_t PRIME_SIZES[] = {
