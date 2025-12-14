@@ -19,6 +19,8 @@ add_library(kronos STATIC
         src/connection/network/address_lifecycle.c
         src/lib/port_table/port_table_lifecycle.c
         src/lib/port_table/port_table_manipulation.c
+        src/log/logging.c
+        src/lib/port_table/link_hash_port_index.c
 )
 
 add_executable(port_table_test port_table_test.c)
@@ -89,6 +91,8 @@ file(APPEND ${CMOCK_CONFIG} "  :plugins:\n")
 file(APPEND ${CMOCK_CONFIG} "  - :ignore\n")
 file(APPEND ${CMOCK_CONFIG} "  - :callback\n")
 file(APPEND ${CMOCK_CONFIG} "  - :return_thru_ptr\n")
+file(APPEND ${CMOCK_CONFIG} "  :exclude_functions:\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_channel_handler_create_st\n")
 file(APPEND ${CMOCK_CONFIG} "  :treat_as:\n")
 file(APPEND ${CMOCK_CONFIG} "    uint8_t: HEX8\n")
 file(APPEND ${CMOCK_CONFIG} "    uint16_t: HEX16\n")
@@ -126,6 +130,11 @@ foreach(header ${PUBLIC_HEADERS})
     add_mock_for_header(${header})
 endforeach()
 
+file(GLOB_RECURSE PRIVATE_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/internal/*.h")
+foreach(header ${PRIVATE_HEADERS})
+    add_mock_for_header(${header})
+endforeach()
+
 add_library(kronos_mocks STATIC ${GENERATED_MOCKS})
 
 target_include_directories(kronos_mocks PUBLIC
@@ -141,6 +150,14 @@ target_compile_options(kronos_mocks PRIVATE
     $<$<NOT:$<C_COMPILER_ID:MSVC>>:-include${MOCK_FORCE_INCLUDE}>
 )
 
+add_custom_target(clean_mocks
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${MOCK_OUTPUT_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${MOCK_OUTPUT_DIR}
+        COMMENT "Cleaning old CMock mocks"
+)
+
+add_custom_target(generate_mocks ALL DEPENDS ${GENERATED_MOCKS})
+
 add_library(malloc_wrapper STATIC test/mocks/malloc_wrapper.c)
 target_include_directories(malloc_wrapper PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/test/mocks)
 
@@ -149,11 +166,8 @@ add_executable(kronos_unit_tests
         test/port_table_test.c
 )
 
-if(TARGET kronos_mocks)
-    target_link_libraries(kronos_unit_tests PRIVATE kronos_mocks)
-endif()
 
-target_link_libraries(kronos_unit_tests PRIVATE kronos unity malloc_wrapper)
+target_link_libraries(kronos_unit_tests PRIVATE kronos kronos_mocks unity malloc_wrapper)
 
 target_link_options(kronos_unit_tests PRIVATE
         -Wl,--wrap=malloc
