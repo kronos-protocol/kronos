@@ -53,6 +53,16 @@ KronosResult_b krs_lib_error_result_base_w_msg(const KronosError_e error_code, c
     result_base.valid = false;
     result_base.error_code = error_code;
     result_base.error_message = error_message;
+    result_base.free_error_message = false;
+    return result_base;
+}
+
+static inline
+KronosResult_b krs_lib_error_result_base_w_msg_heap(const KronosError_e error_code, const char* error_message) {
+    KronosResult_b result_base;
+    result_base.valid = false;
+    result_base.error_code = error_code;
+    result_base.error_message = error_message;
     result_base.free_error_message = true;
     return result_base;
 }
