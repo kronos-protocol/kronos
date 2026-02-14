@@ -21,6 +21,7 @@ add_library(kronos STATIC
         src/lib/port_table/port_table_manipulation.c
         src/log/logging.c
         src/lib/port_table/link_hash_port_index.c
+        src/lib/port_table/port_table_interaction.c
 )
 
 add_executable(port_table_test port_table_test.c)
