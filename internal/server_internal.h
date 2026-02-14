@@ -15,7 +15,7 @@ struct ClientConnection {
     struct tm timestamp_opened;
 };
 
-struct UdpSocketHandler {
+struct UDPSocketDescriptor {
     UDPSocketRef_t udp_socket_ref;
     ChannelType_e channel_types[MAX_CHANNEL_NUMBER];
 };
