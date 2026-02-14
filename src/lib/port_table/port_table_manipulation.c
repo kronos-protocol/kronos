@@ -1,7 +1,7 @@
 #include "kronos_port_table.h"
 #include "port_table_internal.h"
 
-static bool port_table_insert(PortTable_t* port_table, Port_t port, UdpSocketHandler_t* udp_socket_handler) {
+static bool port_table_insert(PortTable_t* port_table, Port_t port, UDPSocketDescriptor_t* udp_socket_handler) {
     if (!port_table || !udp_socket_handler) return false;
 
     size_t index = hash_port_index(port, port_table->table_size);
@@ -37,7 +37,7 @@ static bool port_table_insert(PortTable_t* port_table, Port_t port, UdpSocketHan
     return true;
 }
 
-void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port, UdpSocketHandler_t* udp_socket_handler) {
+void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port, UDPSocketDescriptor* udp_socket_handler) {
     if (!port_table || !udp_socket_handler) return;
 
     if (!port_table->table) return;

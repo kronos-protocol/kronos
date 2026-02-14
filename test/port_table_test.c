@@ -96,12 +96,13 @@ void test_port_table_insert(void) {
     TEST_ASSERT_NOT_NULL_MESSAGE(pt, "PortTable creation failed");
     TEST_ASSERT_NOT_NULL_MESSAGE(pt->table, "PortTable->table is NULL");
 
-    UdpSocketHandler_t udp_socket_handler_fake_struct;
-    UdpSocketHandler_t* udp_socket_handler_fake = &udp_socket_handler_fake_struct;
+    UDPSocketDescriptor_t udp_socket_handler_fake_struct;
+    UDPSocketDescriptor_t* udp_socket_handler_fake = &udp_socket_handler_fake_struct;
 
     Port_t port = 10;
     Port_t port2 = 11;
     uint32_t expected_index = hash_port_index(port, pt->table_size);
+    uint32_t expected_index2 = hash_port_index(port2, pt->table_size);
 
     TEST_ASSERT_NULL_MESSAGE(pt->table[expected_index], "Expected first table slot to be NULL");
 
@@ -110,13 +111,14 @@ void test_port_table_insert(void) {
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pt->total_entries, "total_entries should remain 0 after NULL insert");
 
     krs_lib_port_table_insert(pt, port, udp_socket_handler_fake);
-    test_port_table_field(pt, 4, 0, port, false); // ALERT: This test breaks if the hash_port_index function is changed
+    test_port_table_field(pt, expected_index, 0, port, false); // ALERT: This test breaks if the hash_port_index function is changed
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pt->total_entries, "total_entries should be 1 after first real insert");
 
     krs_lib_port_table_insert(pt, port, udp_socket_handler_fake);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pt->total_entries, "total_entries should remain 1 after duplicate insert");
 
     krs_lib_port_table_insert(pt, port2, udp_socket_handler_fake);
+    test_port_table_field(pt, expected_index2, 0, port2, false); // ALERT: This test breaks if hashing of port 11 and 10 returns the same index
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, pt->total_entries, "total_entries should be 2 after second port insert");
 
     krs_lib_port_table_destroy(&pt);
