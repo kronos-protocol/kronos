@@ -1,5 +1,5 @@
-#include "kronos_network.h"
-#include "network_internal.h"
+#include <kronos_network.h>
+#include <network_internal.h>
 
 #include <string.h>
 
