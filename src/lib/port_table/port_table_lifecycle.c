@@ -53,14 +53,6 @@ PortTableCreate_r krs_lib_port_table_create_s(void) {
         return result;
     }
 
-    port_links_alloc(pt);
-
-    if (!pt->table) {
-        free(pt);
-        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_MEMORY_ALLOCATION, "Could not allocate memory for PortLink_t");
-        return result;
-    }
-
     result.base = krs_lib_error_result_base_suc();
     result.port_table = pt;
     return result;
