@@ -1,46 +1,60 @@
-#include "kronos_network.h"
-#include "../internal/network_internal.h"
 #include "kronos_server.h"
-#include "../internal/server_internal.h"
+#include "server_internal.h"
+
+#include <stdlib.h>
 
 
-// ALERT: Legacy code used for reference
-Endpoint_t* krs_endpoint_setup(Address_t address, Channel_t max_channel) {
-    Endpoint_t * endpoint = malloc(sizeof(Endpoint_t));
-    endpoint->address = address;
-    endpoint->max_channel = max_channel;
+ServerPortManager_t* krs_server_port_manager_create(Address_t default_address) {
+    ServerPortManager_t* server_port_manager = calloc(1, sizeof(ServerPortManager_t));
+    if (!server_port_manager) return NULL;
 
-    WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
-    UDPSocketRef_t udp_socket_ref = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udp_socket_ref == INVALID_SOCKET) {
-        //TODO: error handling
-    }
-    endpoint->udp_socket_ref = udp_socket_ref;
-    bind(udp_socket_ref, (struct sockaddr*)&endpoint->address, sizeof(endpoint->address));
-    return endpoint;
-}
-
-ServerPortManager_t* krs_server_port_manager_create(const Address_t default_address) {
-    ServerPortManager_t* server_port_manager = malloc(sizeof(ServerPortManager_t));
     PortTable_t* port_table = krs_lib_port_table_create();
+    if (!port_table) {
+        free(server_port_manager);
+        return NULL;
+    }
+
+    KrsArray_t* descriptor_list = krs_array_create(8);
+    if (!descriptor_list) {
+        krs_lib_port_table_destroy(&port_table);
+        free(server_port_manager);
+        return NULL;
+    }
 
     server_port_manager->port_table = port_table;
+    server_port_manager->descriptor_list = descriptor_list;
     server_port_manager->default_address = default_address;
-    server_port_manager->default_max_channel = 255; // TODO: let this be changed for now max Channel is always uint8_t max value
-
+    server_port_manager->default_max_channel = 255;
     return server_port_manager;
 }
 
-void krs_server_port_manager_port_add(ServerPortManager_t* server_port_manager, Port_t port) {
-    if (!krs_server_port_manager_validate(server_port_manager)) { //TODO: handle errors
+void krs_server_port_manager_port_add(ServerPortManager_t* spm, Port_t port) {
+    if (!krs_server_port_manager_validate(spm)) return;
 
-    }
-
-    krs_lib_port_table_insert(server_port_manager->port_table, port);
+    PortAddress_t port_address = krs_network_port_address_create(port, spm->default_address);
+    UDPSocketDescriptor_t* socket_handler = krs_server_udp_socket_handler_create(port_address);
+    if (!socket_handler) return;
+    socket_handler->port = port;
+    krs_lib_port_table_insert(spm->port_table, port, socket_handler);
+    krs_array_push(spm->descriptor_list, socket_handler);
 }
 
+void krs_server_port_manager_port_add_with_address(ServerPortManager_t* spm, Port_t port, Address_t address) {
+    if (!krs_server_port_manager_validate(spm)) return;
 
-void krs_server_port_manager_port_add_with_address(ServerPortManager_t* server_port_manager, Port_t port, Address_t address);
+    PortAddress_t port_address = krs_network_port_address_create(port, address);
+    UDPSocketDescriptor_t* socket_handler = krs_server_udp_socket_handler_create(port_address);
+    if (!socket_handler) return;
+    socket_handler->port = port;
+    krs_lib_port_table_insert(spm->port_table, port, socket_handler);
+    krs_array_push(spm->descriptor_list, socket_handler);
+}
 
-
+void krs_server_port_manager_destroy(ServerPortManager_t** spm) {
+    if (!spm || !*spm) return;
+    ServerPortManager_t* m = *spm;
+    krs_array_destroy(&m->descriptor_list);
+    krs_lib_port_table_destroy(&m->port_table);
+    free(m);
+    *spm = NULL;
+}
