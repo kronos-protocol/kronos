@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 /**
+ * DISCLAIMER
  * General Infos about the Kronos library:
  * The library is fully functional by just using the headers in the `include` directory.
  * If you want more control you can use the internal headers. Use at your own discretion.
