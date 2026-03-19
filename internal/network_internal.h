@@ -14,4 +14,7 @@ struct Connection {
     //TODO: add universal connection information in this struct
 };
 
+void krs_wsa_init(void);
+void krs_wsa_cleanup(void);
+
 #endif //NETWORK_INTERNAL_H
