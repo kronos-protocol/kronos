@@ -4,6 +4,19 @@
 #include <frame_metadata.h>
 #include <stdint.h>
 
+/**
+ * General Infos about the Kronos library:
+ * The library is fully functional by just using the headers in the `include` directory.
+ * If you want more control you can use the internal headers. Use at your own discretion.
+ *
+ * The following typedef suffixes have a meaning:
+ * _e: Enums.
+ * _t: Structs which are used as plain data models.
+ * _c: Structs which serve a purpose, more in line with the OOP model of a class.
+ *     These structs usually have functions serving as methods.
+ * _f: Function pointers.
+ */
+
 /** @brief Opaque frame type. Full definition in kronos_internal.h. */
 typedef struct Frame Frame_t;
 
@@ -11,7 +24,7 @@ typedef struct Frame Frame_t;
 typedef enum FrameType FrameType_e;
 
 /** @brief Opaque frame builder for constructing serialized frames. */
-typedef struct FrameBuilder FrameBuilder_t;
+typedef struct FrameBuilder FrameBuilder_c;
 
 /**
  * @brief Parses a raw UDP datagram into a frame using caller-provided stack storage for the body.
@@ -88,7 +101,7 @@ void krs_frame_destroy(Frame_t** frame);
  * @param type     Frame type identifier.
  * @return Pointer to the new FrameBuilder_t, or NULL on allocation failure.
  */
-FrameBuilder_t* krs_frame_builder_create(uint8_t channel, FrameType_e type);
+FrameBuilder_c* krs_frame_builder_create(uint8_t channel, FrameType_e type);
 
 /**
  * @brief Sets the packet ID on the frame builder.
@@ -96,7 +109,7 @@ FrameBuilder_t* krs_frame_builder_create(uint8_t channel, FrameType_e type);
  * @param builder    The frame builder.
  * @param packet_id  64-bit packet identifier.
  */
-void krs_frame_builder_set_packet_id(FrameBuilder_t* builder, uint64_t packet_id);
+void krs_frame_builder_set_packet_id(FrameBuilder_c* builder, uint64_t packet_id);
 
 /**
  * @brief Sets a presence flag bit on the frame builder.
@@ -104,7 +117,7 @@ void krs_frame_builder_set_packet_id(FrameBuilder_t* builder, uint64_t packet_id
  * @param builder  The frame builder.
  * @param flag     The metadata flag position to set.
  */
-void krs_frame_builder_set_flag(FrameBuilder_t* builder, MetadataFlagPosition_e flag);
+void krs_frame_builder_set_flag(FrameBuilder_c* builder, MetadataFlagPosition_e flag);
 
 /**
  * @brief Attaches a body payload to the frame builder.
@@ -115,7 +128,7 @@ void krs_frame_builder_set_flag(FrameBuilder_t* builder, MetadataFlagPosition_e 
  * @param data     Pointer to the payload bytes.
  * @param length   Number of payload bytes.
  */
-void krs_frame_builder_set_data(FrameBuilder_t* builder, const uint8_t* data, uint16_t length);
+void krs_frame_builder_set_data(FrameBuilder_c* builder, const uint8_t* data, uint16_t length);
 
 //TODO: add same function that returns Frame_t
 /**
@@ -129,14 +142,14 @@ void krs_frame_builder_set_data(FrameBuilder_t* builder, const uint8_t* data, ui
  * @param out_size  Capacity of out in bytes.
  * @return Total bytes written, or 0 if out is NULL/too small.
  */
-uint16_t krs_frame_builder_serialize(FrameBuilder_t* builder, uint8_t* out, uint16_t out_size);
+uint16_t krs_frame_builder_serialize(FrameBuilder_c* builder, uint8_t* out, uint16_t out_size);
 
 /**
  * @brief Destroys a frame builder, freeing its memory.
  *
  * @param builder  Pointer to the builder pointer; set to NULL on return.
  */
-void krs_frame_builder_destroy(FrameBuilder_t** builder);
+void krs_frame_builder_destroy(FrameBuilder_c** builder);
 
 /**
  * @brief Encodes major, minor, and patch version components into a single byte.
