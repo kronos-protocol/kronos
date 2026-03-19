@@ -18,6 +18,6 @@ struct Frame {
 };
 
 #define KRONOS_FRAME_HEADER_LENGTH 14
-#define KRONOS_BUFFER_SIZE 1024
+#define KRONOS_BUFFER_SIZE 1500
 
 #endif // KRONOS_INTERNAL_H
