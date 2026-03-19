@@ -1,4 +1,4 @@
-#import <kronos_log.h>
+#include "kronos_log.h"
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -17,8 +17,9 @@ void krs_log_disable(void) {
 void krs_log(KronosLogLevel_e level, const char* component, const char* format, ...) {
     if (!DEFAULT_CALLBACK) return;
 
-    char buffer[512]; // TODO: add this later to config with the char buffer pool from error messages
-    const char* component_w_prefix = strcat("KRS_", component);
+    char buffer[512];
+    char component_w_prefix[256];
+    snprintf(component_w_prefix, sizeof(component_w_prefix), "KRS_%s", component);
     va_list args;
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
