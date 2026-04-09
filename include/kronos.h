@@ -1,6 +1,7 @@
 #ifndef KRONOS_H
 #define KRONOS_H
 #include <kronos_internal.h>
+#include <kronos_error.h>
 #include <frame_metadata.h>
 #include <stdint.h>
 
@@ -27,27 +28,45 @@ typedef enum FrameType FrameType_e;
 /** @brief Opaque frame builder for constructing serialized frames. */
 typedef struct FrameBuilder FrameBuilder_c;
 
+/** @brief Result type for safe frame creation. */
+typedef struct FrameCreateResult FrameCreate_r;
+
 /**
  * @brief Parses a raw UDP datagram into a frame using caller-provided stack storage for the body.
  *
  * Returns a zero-initialized Frame_t if buffer is NULL, received_bytes is less than
- * KRONOS_FRAME_HEADER_LENGTH, or the first byte is not 0x4B. //TODO: decide if caller has the responsibility of ensuring received_bytes fits into stack_data_out_size
+ * KRONOS_FRAME_HEADER_LENGTH, or the first byte is not 0x4B.
  *
  * @param buffer              Raw UDP datagram bytes.
  * @param received_bytes      Number of bytes received.
- * @param stack_data_out      Caller-allocated buffer to hold the frame body. //TODO: think about renaming this to be more indicative
+ * @param stack_data_out      Caller-allocated buffer to hold the frame body.
  * @param stack_data_out_size Size of stack_data_out in bytes.
  * @return Parsed Frame_t. Returns a zero-initialized Frame_t on error.
  */
 Frame_t krs_frame_create(const uint8_t* buffer, uint16_t received_bytes, uint8_t* stack_data_out, uint16_t stack_data_out_size);
 
-//TODO: add krs_frame_create_s to not rely on zero initialized Frame_t on error.
+/**
+ * @brief Parses a raw UDP datagram into a frame with explicit error handling.
+ *
+ * @param buffer              Raw UDP datagram bytes.
+ * @param received_bytes      Number of bytes received.
+ * @param stack_data_out      Caller-allocated buffer for frame body.
+ * @param stack_data_out_size Size of stack_data_out.
+ * @return FrameCreate_r containing the frame or error information.
+ *
+ * @retval KRS_SUCCESS                  Frame parsed successfully.
+ * @retval KRS_ERR_NULL_POINTER         buffer or stack_data_out is NULL.
+ * @retval KRS_ERR_FRAME_INVALID_HEADER received_bytes < KRONOS_FRAME_HEADER_LENGTH.
+ * @retval KRS_ERR_FRAME_INVALID_PROTOCOL First byte is not 0x4B.
+ * @retval KRS_ERR_BUFFER_TOO_SMALL     stack_data_out_size too small for body.
+ */
+FrameCreate_r krs_frame_create_s(const uint8_t* buffer, uint16_t received_bytes,
+                                 uint8_t* stack_data_out, uint16_t stack_data_out_size);
 
 /**
  * @brief Parses a raw UDP datagram into a heap-allocated frame.
  *
  * The caller is responsible for calling krs_frame_destroy() on the returned frame.
- * //TODO: specify when a null pointer is returned
  *
  * @param buffer          Raw UDP datagram bytes.
  * @param received_bytes  Number of bytes received.
@@ -63,7 +82,7 @@ Frame_t* krs_frame_create_heap(const uint8_t* buffer, uint16_t received_bytes);
  * @param buffer          Raw UDP datagram bytes.
  * @param received_bytes  Number of bytes received.
  * @param out             Pre-allocated Frame_t to write into.
- * @param out_data_size   Capacity of out->body. //TODO: rename parameter
+ * @param out_data_size   Capacity of out->body.
  */
 void krs_frame_init(const uint8_t* buffer, uint16_t received_bytes, Frame_t* out, uint16_t out_data_size);
 
@@ -85,7 +104,6 @@ uint16_t krs_frame_calculate_body_length(uint16_t received_bytes);
  */
 uint16_t krs_frame_get_content(const Frame_t* frame, uint8_t* out, uint16_t out_data_size);
 
-//TODO: think about adding a flag into Frame_t to declare if its stack or heap allocated to prevent issues with freeing stack frames
 /**
  * @brief Frees a heap-allocated frame and its body.
  *
@@ -131,7 +149,6 @@ void krs_frame_builder_set_flag(FrameBuilder_c* builder, MetadataFlagPosition_e 
  */
 void krs_frame_builder_set_data(FrameBuilder_c* builder, const uint8_t* data, uint16_t length);
 
-//TODO: add same function that returns Frame_t
 /**
  * @brief Serializes the frame builder into a byte buffer in Kronos wire format.
  *
@@ -180,7 +197,6 @@ void krs_version_decode(uint8_t version, uint8_t* major, uint8_t* minor, uint8_t
  * Values 0–9 are general purpose. 10–19 are client-only. 20–29 are server-only.
  */
 enum FrameType {
-    //TODO: WIP FrameTypes
     MESSAGE_ACK   = 0,
     BASIC_MESSAGE = 1,
 
@@ -189,6 +205,11 @@ enum FrameType {
     SOCKET_SETUP = 12,
 
     SOCKET_ACK = 22,
+};
+
+struct FrameCreateResult {
+    KronosResult_b base;
+    Frame_t frame;
 };
 
 #endif // KRONOS_H
