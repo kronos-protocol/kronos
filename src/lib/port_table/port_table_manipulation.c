@@ -37,7 +37,7 @@ static bool port_table_insert(PortTable_t* port_table, Port_t port, UDPSocketDes
     return true;
 }
 
-void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port, UDPSocketDescriptor* udp_socket_handler) {
+void krs_lib_port_table_insert(PortTable_t* port_table, Port_t port, UDPSocketDescriptor_t* udp_socket_handler) {
     if (!port_table || !udp_socket_handler) return;
 
     if (!port_table->table) return;
