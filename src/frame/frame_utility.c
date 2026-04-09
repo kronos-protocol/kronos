@@ -8,9 +8,12 @@ uint16_t krs_frame_calculate_body_length(const uint16_t received_bytes) {
 }
 
 uint16_t krs_frame_body_metadata_get_length(const Frame_t* frame) {
+    if (!frame) return 0;
     uint16_t total_length = 0;
     for (int i = 0; i < META_FLAG_COUNT; i++) {
-        total_length += KRS_METADATA_FLAG_POSITION_SIZE[i];
+        if (frame->presence_flags & (uint16_t)(1u << i)) {
+            total_length += KRS_METADATA_FLAG_POSITION_SIZE[i];
+        }
     }
     return total_length;
 }
