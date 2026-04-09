@@ -1,6 +1,7 @@
 #ifndef KRONOS_SERVER_H
 #define KRONOS_SERVER_H
 #include "kronos_network.h"
+#include <stdbool.h>
 
 /** @brief Opaque server port manager owning a port table and default configuration. */
 typedef struct ServerPortManager ServerPortManager_t;
@@ -10,6 +11,15 @@ typedef struct UDPSocketDescriptor UDPSocketDescriptor_t;
 
 /** @brief Opaque client connection object (server-side, represents one connected client). */
 typedef struct ClientConnection ClientConnection_t;
+
+/**
+ * @brief Callback invoked when a client connects or disconnects.
+ *
+ * @param connection_id  The connection ID of the connecting/disconnecting client.
+ * @param channel        The channel on which the connection event occurred.
+ * @param user_data      User-supplied context pointer.
+ */
+typedef void (*ConnectionLifecycleCallback_f)(uint32_t connection_id, Channel_t channel, void* user_data);
 
 /**
  * @brief Callback invoked when a message arrives on a port or channel.
@@ -117,6 +127,28 @@ Void_r krs_server_set_channel_callback(ServerPortManager_t* spm, Port_t port, Ch
                                        ChannelMessageCallback_f callback, void* user_data);
 
 /**
+ * @brief Sends data to a specific connected client by connection ID.
+ *
+ * Looks up the client's remote address from the connection table and sends
+ * the payload. Uses fragmentation if the data exceeds MTU.
+ *
+ * @param spm            The server port manager.
+ * @param connection_id  Target client connection ID.
+ * @param channel        Target channel.
+ * @param data           Payload bytes to send.
+ * @param length         Number of payload bytes.
+ * @param require_ack    If true, registers the packet for ACK tracking.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS                  Data sent.
+ * @retval KRS_ERR_NULL_POINTER         spm or data is NULL.
+ * @retval KRS_ERR_INVALID_PARAMETER    connection_id not found.
+ * @retval KRS_ERR_NETWORK_SOCKET_ERROR Send failed.
+ */
+Void_r krs_server_send(ServerPortManager_t* spm, uint32_t connection_id, Channel_t channel,
+                       const uint8_t* data, uint16_t length, bool require_ack);
+
+/**
  * @brief Broadcasts data to all connections on the given channel across all registered ports.
  *
  * @param spm     The server port manager.
@@ -163,5 +195,37 @@ Void_r krs_server_start(ServerPortManager_t* spm);
  * @param spm  The server port manager.
  */
 void krs_server_stop(ServerPortManager_t* spm);
+
+/**
+ * @brief Registers a callback invoked when a new client connects on any channel.
+ *
+ * @param spm        The server port manager.
+ * @param port       The port whose descriptor receives the callback.
+ * @param callback   Callback function pointer.
+ * @param user_data  Caller-supplied context.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS           Callback registered.
+ * @retval KRS_ERR_NULL_POINTER  spm is NULL.
+ * @retval KRS_ERR_NOT_INITIALIZED  No descriptor for port.
+ */
+Void_r krs_server_set_connect_callback(ServerPortManager_t* spm, Port_t port,
+                                       ConnectionLifecycleCallback_f callback, void* user_data);
+
+/**
+ * @brief Registers a callback invoked when a client is disconnected (heartbeat timeout).
+ *
+ * @param spm        The server port manager.
+ * @param port       The port whose descriptor receives the callback.
+ * @param callback   Callback function pointer.
+ * @param user_data  Caller-supplied context.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS           Callback registered.
+ * @retval KRS_ERR_NULL_POINTER  spm is NULL.
+ * @retval KRS_ERR_NOT_INITIALIZED  No descriptor for port.
+ */
+Void_r krs_server_set_disconnect_callback(ServerPortManager_t* spm, Port_t port,
+                                          ConnectionLifecycleCallback_f callback, void* user_data);
 
 #endif // KRONOS_SERVER_H
