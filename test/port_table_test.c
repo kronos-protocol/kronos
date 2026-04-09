@@ -1,9 +1,12 @@
 #include "malloc_wrapper.h"
 #include "unity.h"
-#include "mock_kronos_server.h"
+#include "kronos_server.h"
 #include "server_internal.h"
 #include "port_table_internal.h"
 #include <kronos_port_table.h>
+
+#include <stdlib.h>
+#include <winsock2.h>
 
 
 static void test_port_table_fields_empty(PortTable_t* pt) {
@@ -57,7 +60,7 @@ void test_port_table_internal_prime_sizes_exist(void) {
 
 void test_port_table_creation(void) {
     mock_malloc_fail_next();
-    krs_server_udp_socket_handler_destroy_Ignore();
+
 
     PortTable_t* pt_empty = krs_lib_port_table_create();
     TEST_ASSERT_NULL_MESSAGE(pt_empty, "Expected NULL for malloc-failed PortTable");
@@ -71,7 +74,7 @@ void test_port_table_creation(void) {
 
 void test_port_table_creation_s(void) {
     mock_malloc_fail_next();
-    krs_server_udp_socket_handler_destroy_Ignore();
+
 
     PortTableCreate_r pt_empty = krs_lib_port_table_create_s();
     TEST_ASSERT_FALSE_MESSAGE(pt_empty.base.valid, "Expected invalid result due to malloc failure");
@@ -82,7 +85,7 @@ void test_port_table_creation_s(void) {
     PortTableCreate_r pt = krs_lib_port_table_create_s();
     TEST_ASSERT_NOT_NULL_MESSAGE(pt.port_table, "PortTable creation failed");
     TEST_ASSERT_TRUE_MESSAGE(pt.base.valid, "Result should be valid");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(KRS_ERR_SUCCESS, pt.base.error_code, "Error code does not match KRS_ERR_SUCCESS");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(KRS_SUCCESS, pt.base.error_code, "Error code does not match KRS_SUCCESS");
     TEST_ASSERT_FALSE_MESSAGE(pt.base.free_error_message, "free_error_message should be false");
     test_port_table_fields_empty(pt.port_table);
 
@@ -90,14 +93,17 @@ void test_port_table_creation_s(void) {
 }
 
 void test_port_table_insert(void) {
-    krs_server_udp_socket_handler_destroy_Ignore();
-
     PortTable_t* pt = krs_lib_port_table_create();
     TEST_ASSERT_NOT_NULL_MESSAGE(pt, "PortTable creation failed");
     TEST_ASSERT_NOT_NULL_MESSAGE(pt->table, "PortTable->table is NULL");
 
-    UDPSocketDescriptor_t udp_socket_handler_fake_struct;
-    UDPSocketDescriptor_t* udp_socket_handler_fake = &udp_socket_handler_fake_struct;
+    UDPSocketDescriptor_t* udp_socket_handler_fake = calloc(1, sizeof(UDPSocketDescriptor_t));
+    TEST_ASSERT_NOT_NULL(udp_socket_handler_fake);
+    udp_socket_handler_fake->udp_socket_ref = INVALID_SOCKET;
+
+    UDPSocketDescriptor_t* udp_socket_handler_fake2 = calloc(1, sizeof(UDPSocketDescriptor_t));
+    TEST_ASSERT_NOT_NULL(udp_socket_handler_fake2);
+    udp_socket_handler_fake2->udp_socket_ref = INVALID_SOCKET;
 
     Port_t port = 10;
     Port_t port2 = 11;
@@ -117,7 +123,7 @@ void test_port_table_insert(void) {
     krs_lib_port_table_insert(pt, port, udp_socket_handler_fake);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pt->total_entries, "total_entries should remain 1 after duplicate insert");
 
-    krs_lib_port_table_insert(pt, port2, udp_socket_handler_fake);
+    krs_lib_port_table_insert(pt, port2, udp_socket_handler_fake2);
     test_port_table_field(pt, expected_index2, 0, port2, false); // ALERT: This test breaks if hashing of port 11 and 10 returns the same index
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, pt->total_entries, "total_entries should be 2 after second port insert");
 
@@ -125,8 +131,6 @@ void test_port_table_insert(void) {
 }
 
 void test_port_table_destroy(void) {
-    krs_server_udp_socket_handler_destroy_Ignore();
-
     PortTable_t* pt = krs_lib_port_table_create();
     TEST_ASSERT_NOT_NULL_MESSAGE(pt, "PortTable creation failed");
     TEST_ASSERT_NOT_NULL_MESSAGE(pt->table, "PortTable->table is NULL");
