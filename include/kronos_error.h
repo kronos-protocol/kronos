@@ -52,6 +52,7 @@ enum KronosError {
     KRS_ERR_SERVER_NOT_LISTENING    = 302,
     KRS_ERR_SERVER_BIND_FAILED      = 303,
     KRS_ERR_SERVER_ALREADY_RUNNING  = 304,
+    KRS_ERR_SERVER_CONGESTION_WINDOW_FULL = 305,
 
     KRS_ERR_CLIENT_NOT_CONNECTED    = 400,
     KRS_ERR_CLIENT_CONNECTION_LOST  = 401,
@@ -126,7 +127,6 @@ KronosErrorCategory_e krs_error_get_category(krs_error_t error);
  */
 bool krs_error_is_fatal(krs_error_t error);
 
-//TODO: move temporary inline to .c file
 /**
  * @brief Frees any dynamically allocated error message stored in a result base.
  *
