@@ -16,9 +16,6 @@ typedef struct Endpoint Endpoint_t;
 /** @brief 8-bit channel identifier (0–255). */
 typedef uint8_t Channel_t;
 
-/** @brief Opaque connection object. */
-typedef struct Connection Connection_t;
-
 /** @brief IPv6 socket address used for all network operations (wraps sockaddr_in6). */
 typedef struct sockaddr_in6 PortAddress_t;
 
