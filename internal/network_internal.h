@@ -10,10 +10,6 @@ struct Endpoint {
     Channel_t channel;
 };
 
-struct Connection {
-    //TODO: add universal connection information in this struct
-};
-
 void krs_wsa_init(void);
 void krs_wsa_cleanup(void);
 
