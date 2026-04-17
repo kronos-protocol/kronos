@@ -10,27 +10,45 @@ endif()
 
 add_library(kronos STATIC
         src/frame/frame_lifecycle.c
+        src/frame/frame_builder.c
+        src/frame/frame_version.c
         src/math/bitmask.c
         src/frame/frame_utility.c
         src/frame/frame_content.c
         src/math/uint_conversion.c
-        src/connection/server/server_connection_lifecycle.c
+        src/connection/server/server_port_manager_lifecycle.c
         src/connection/server/server_port_manager_validation.c
+        src/connection/server/socket_handler_lifecycle.c
         src/connection/network/address_lifecycle.c
+        src/connection/network/udp_socket_ref_lifecycle.c
+        src/connection/network/wsa_lifecycle.c
+        src/connection/network/address_operations.c
         src/lib/port_table/port_table_lifecycle.c
         src/lib/port_table/port_table_manipulation.c
         src/log/logging.c
         src/lib/port_table/link_hash_port_index.c
         src/lib/port_table/port_table_interaction.c
+        src/error/error_messages.c
+        src/lib/array/array_lifecycle.c
+        src/lib/array/array_operations.c
+        src/ack/ack_tracker.c
+        src/packet/packet_counter.c
+        src/congestion/congestion_controller.c
+        src/frame/fragment.c
+        src/connection/server/server_callbacks.c
+        src/connection/server/server_broadcast.c
+        src/connection/server/server_connection_handler.c
+        src/connection/server/message_queue.c
+        src/connection/server/iocp_lifecycle.c
+        src/connection/server/iocp_io_thread.c
+        src/connection/server/message_handler.c
+        src/connection/server/retransmit_thread.c
+        src/connection/server/message_pool.c
+        src/connection/server/connection_map.c
+        src/connection/client/client_connection.c
 )
 
-add_executable(port_table_test port_table_test.c)
-target_link_libraries(port_table_test PRIVATE kronos)
-
-if (WIN32)
-    # target_link_libraries(kronos_preview_server PRIVATE kronos ws2_32)
-    # target_link_libraries(kronos_preview_client PRIVATE kronos ws2_32)
-endif ()
+target_link_libraries(kronos PRIVATE ws2_32)
 
 target_include_directories(kronos PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -51,6 +69,7 @@ enable_testing()
 
 add_library(unity STATIC unity/src/unity.c)
 target_include_directories(unity PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/unity/src)
+target_compile_definitions(unity PUBLIC UNITY_INCLUDE_DOUBLE)
 
 add_library(cmock STATIC cmock/src/cmock.c)
 target_include_directories(cmock PUBLIC
@@ -93,7 +112,44 @@ file(APPEND ${CMOCK_CONFIG} "  - :ignore\n")
 file(APPEND ${CMOCK_CONFIG} "  - :callback\n")
 file(APPEND ${CMOCK_CONFIG} "  - :return_thru_ptr\n")
 file(APPEND ${CMOCK_CONFIG} "  :exclude_functions:\n")
-file(APPEND ${CMOCK_CONFIG} "    - krs_server_channel_handler_create_st\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_port_manager_create\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_port_manager_destroy\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_port_manager_port_add\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_port_manager_port_add_with_address\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_udp_socket_handler_create\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_set_port_callback\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_set_channel_callback\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_broadcast\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_broadcast_except\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_start\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_stop\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_send\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_client_set_callback\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_client_start_receive\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_set_connect_callback\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_set_disconnect_callback\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_ack_tracker_get_retry_frame\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_ack_tracker_receive_rtt\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_create\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_destroy\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_can_send\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_on_send\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_on_ack\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_on_loss\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_get_cwnd\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_get_in_flight\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_get_rto\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_congestion_get_srtt\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_reassembler_sweep_stale\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_set_thread_counts\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_ack_tracker_set_timeout\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_client_send_blocking\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_send_blocking\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_get_stats\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_server_set_channel_range_callback\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_log_set_level\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_log_get_level\n")
+file(APPEND ${CMOCK_CONFIG} "    - krs_message_pool_get_fallback_count\n")
 file(APPEND ${CMOCK_CONFIG} "  :treat_as:\n")
 file(APPEND ${CMOCK_CONFIG} "    uint8_t: HEX8\n")
 file(APPEND ${CMOCK_CONFIG} "    uint16_t: HEX16\n")
@@ -165,10 +221,23 @@ target_include_directories(malloc_wrapper PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/tes
 add_executable(kronos_unit_tests
         test/main_test.c
         test/port_table_test.c
+        test/test_array.c
+        test/test_frame.c
+        test/test_ack.c
+        test/test_packet_counter.c
+        test/test_fragment.c
+        test/test_connection.c
+        test/test_message_queue.c
+        test/test_address_compare.c
+        test/test_message_handler.c
+        test/test_wsa_lifecycle.c
+        test/test_integration.c
+        test/test_congestion.c
 )
 
 
-target_link_libraries(kronos_unit_tests PRIVATE kronos kronos_mocks unity malloc_wrapper)
+# kronos_mocks intentionally excluded — causes duplicate symbol errors with direct kronos link
+target_link_libraries(kronos_unit_tests PRIVATE kronos unity malloc_wrapper ws2_32)
 
 target_link_options(kronos_unit_tests PRIVATE
         -Wl,--wrap=malloc
@@ -187,3 +256,42 @@ target_include_directories(kronos_unit_tests PRIVATE
 )
 
 add_test(NAME kronos_unit_tests COMMAND kronos_unit_tests)
+
+# Demo applications
+add_executable(demo_server demo/demo_server.c)
+target_link_libraries(demo_server PRIVATE kronos ws2_32)
+target_include_directories(demo_server PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/internal
+)
+
+add_executable(demo_client demo/demo_client.c)
+target_link_libraries(demo_client PRIVATE kronos ws2_32)
+target_include_directories(demo_client PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/internal
+)
+
+# Benchmark suite
+add_executable(bench_server bench/bench_server.c)
+target_link_libraries(bench_server PRIVATE kronos ws2_32)
+target_include_directories(bench_server PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/internal
+)
+
+add_executable(bench_client bench/bench_client.c bench/bench_stats.c)
+target_link_libraries(bench_client PRIVATE kronos ws2_32)
+target_include_directories(bench_client PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/internal
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench
+)
+
+add_executable(bench_multi bench/bench_multi.c bench/bench_stats.c)
+target_link_libraries(bench_multi PRIVATE kronos ws2_32)
+target_include_directories(bench_multi PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/internal
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench
+)
