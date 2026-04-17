@@ -1,14 +1,13 @@
 #ifndef KRONOS_NETWORK_H
 #define KRONOS_NETWORK_H
 #include "kronos_error.h"
+#include "kronos_platform.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
 
-/** @brief SOCKET handle wrapping the platform UDP socket. */
-typedef SOCKET UDPSocketRef_t;
+/** @brief Platform socket handle wrapping the underlying UDP socket. */
+typedef KrsSocketHandle_t UDPSocketRef_t;
 
 /** @brief Opaque endpoint combining an address, socket, and channel. */
 typedef struct Endpoint Endpoint_t;
@@ -16,8 +15,8 @@ typedef struct Endpoint Endpoint_t;
 /** @brief 8-bit channel identifier (0–255). */
 typedef uint8_t Channel_t;
 
-/** @brief IPv6 socket address used for all network operations (wraps sockaddr_in6). */
-typedef struct sockaddr_in6 PortAddress_t;
+/** @brief IPv6 socket address used for all network operations. */
+typedef KrsNetworkAddress_t PortAddress_t;
 
 /** @brief IPv6 address (wraps in6_addr). IPv4 addresses are stored as IPv4-mapped IPv6. */
 typedef struct in6_addr Address_t;
@@ -124,7 +123,7 @@ PortAddress_t krs_network_port_address_create(Port_t port, Address_t address);
  * @brief Creates a bound UDP socket for the given port address.
  *
  * @param port_address  The address and port to bind to.
- * @return Bound SOCKET handle, or INVALID_SOCKET on failure.
+ * @return Bound socket handle, or KRS_INVALID_SOCKET on failure.
  */
 UDPSocketRef_t krs_network_udp_socket_ref_create(PortAddress_t port_address);
 
