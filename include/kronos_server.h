@@ -1,6 +1,7 @@
 #ifndef KRONOS_SERVER_H
 #define KRONOS_SERVER_H
 #include "kronos_network.h"
+#include "kronos_stats.h"
 #include <stdbool.h>
 
 /** @brief Opaque server port manager owning a port table and default configuration. */
@@ -227,5 +228,77 @@ Void_r krs_server_set_connect_callback(ServerPortManager_t* spm, Port_t port,
  */
 Void_r krs_server_set_disconnect_callback(ServerPortManager_t* spm, Port_t port,
                                           ConnectionLifecycleCallback_f callback, void* user_data);
+
+/**
+ * @brief Configures the number of IOCP I/O threads and message handler threads.
+ *
+ * Must be called before krs_server_start(). If not called, defaults are
+ * 2 IOCP threads and 4 handler threads.
+ *
+ * @param spm              The server port manager.
+ * @param iocp_threads     Number of IOCP I/O threads (minimum 1).
+ * @param handler_threads  Number of message handler threads (minimum 1).
+ */
+void krs_server_set_thread_counts(ServerPortManager_t* spm,
+                                  uint32_t iocp_threads, uint32_t handler_threads);
+
+/**
+ * @brief Retrieves a snapshot of current server runtime statistics.
+ *
+ * All counters are read atomically but the snapshot is not globally
+ * consistent — individual fields may reflect slightly different points
+ * in time under concurrent load.
+ *
+ * @param spm  The server port manager.
+ * @return ServerStats_t with current counter values. Returns zeroed struct if spm is NULL.
+ */
+ServerStats_t krs_server_get_stats(const ServerPortManager_t* spm);
+
+/**
+ * @brief Sends data reliably to a client with automatic congestion backpressure retry.
+ *
+ * Calls krs_server_send with require_ack=true. If the congestion window is
+ * full, retries with 1ms sleep intervals until success or timeout_ms expires.
+ *
+ * @param spm            The server port manager.
+ * @param connection_id  Target client connection ID.
+ * @param channel        Target channel.
+ * @param data           Payload bytes to send.
+ * @param length         Number of payload bytes.
+ * @param timeout_ms     Maximum time to wait in milliseconds. Pass 0 for single attempt.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS                          Data sent.
+ * @retval KRS_ERR_NULL_POINTER                 spm or data is NULL.
+ * @retval KRS_ERR_INVALID_PARAMETER            connection_id not found.
+ * @retval KRS_ERR_SERVER_CONGESTION_WINDOW_FULL  Timeout expired while window full.
+ */
+Void_r krs_server_send_blocking(ServerPortManager_t* spm, uint32_t connection_id,
+                                Channel_t channel, const uint8_t* data,
+                                uint16_t length, uint32_t timeout_ms);
+
+/**
+ * @brief Registers the same callback for all channels in a range [from_channel, to_channel].
+ *
+ * Both from_channel and to_channel are inclusive. Both must be >= 10 (reserved
+ * channels 0–9 are rejected). Equivalent to calling krs_server_set_channel_callback
+ * for each channel in the range.
+ *
+ * @param spm          The server port manager.
+ * @param port         The port whose descriptor receives the callbacks.
+ * @param from_channel First channel in the range (inclusive, must be >= 10).
+ * @param to_channel   Last channel in the range (inclusive, must be >= from_channel).
+ * @param callback     Callback function pointer.
+ * @param user_data    Caller-supplied context passed to the callback.
+ * @return Void_r indicating success or failure. Returns error on first failing channel.
+ *
+ * @retval KRS_SUCCESS                  All callbacks registered.
+ * @retval KRS_ERR_NULL_POINTER         spm is NULL.
+ * @retval KRS_ERR_INVALID_PARAMETER    from_channel < 10, to_channel < from_channel, or channel > 255.
+ * @retval KRS_ERR_NOT_INITIALIZED      No descriptor found for the given port.
+ */
+Void_r krs_server_set_channel_range_callback(ServerPortManager_t* spm, Port_t port,
+                                             Channel_t from_channel, Channel_t to_channel,
+                                             ChannelMessageCallback_f callback, void* user_data);
 
 #endif // KRONOS_SERVER_H
