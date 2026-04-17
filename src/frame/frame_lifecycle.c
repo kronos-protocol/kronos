@@ -1,6 +1,7 @@
 #include "kronos.h"
-#include "kronos_internal.h"
 #include "kronos_math.h"
+
+#include "kronos_internal.h"
 
 #include <stdint.h>
 #include <stdlib.h>
