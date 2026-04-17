@@ -152,21 +152,24 @@ static inline KronosResult_b krs_lib_error_result_base_suc(void) {
     };
 }
 
-static inline KronosResult_b krs_lib_error_result_base_w_msg(KronosError_e error_code, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
-
 /**
- * @brief Creates a failed result base using the format string as a static error message.
+ * @brief Creates a failed result base with a static (non-formatted) error message.
+ *
+ * Unlike _w_msgf, this variant does NOT accept format specifiers and does NOT
+ * allocate. The message string is stored by reference and must have static
+ * storage duration (typically a string literal).
+ *
+ * For formatted messages, use krs_lib_error_result_base_w_msgf.
  *
  * @param error_code  The error code.
- * @param fmt         Message string stored as the error message (not formatted, no allocation).
+ * @param msg         Static error message string (typically a string literal).
  * @return KronosResult_b with valid=false.
  */
-static inline KronosResult_b krs_lib_error_result_base_w_msg(KronosError_e error_code, const char* fmt, ...) {
-    (void)fmt;
+static inline KronosResult_b krs_lib_error_result_base_w_msg(KronosError_e error_code, const char* msg) {
     return (KronosResult_b){
         .valid = false,
         .error_code = error_code,
-        .error_message = fmt,
+        .error_message = msg,
         .free_error_message = false
     };
 }
