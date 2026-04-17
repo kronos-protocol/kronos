@@ -38,6 +38,25 @@ void krs_log_callback_set(KronosLogCallback_f callback);
 void krs_log_disable(void);
 
 /**
+ * @brief Sets the minimum log level. Messages below this level are discarded.
+ *
+ * Thread-safe. Can be called at any time, including while the server is running.
+ * Default minimum level is KRS_LOG_DEBUG (all messages pass).
+ *
+ * @param level  The minimum severity level to forward to the callback.
+ */
+void krs_log_set_level(KronosLogLevel_e level);
+
+/**
+ * @brief Returns the currently configured minimum log level.
+ *
+ * Thread-safe.
+ *
+ * @return The current minimum log level.
+ */
+KronosLogLevel_e krs_log_get_level(void);
+
+/**
  * @brief Emits a log message at the given severity level.
  *
  * No-op if no callback is registered. The component name is prefixed with "KRS_"
