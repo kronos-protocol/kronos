@@ -82,4 +82,27 @@ void krs_client_set_callback(ServerConnection_t* conn, ChannelMessageCallback_f 
  */
 Void_r krs_client_start_receive(ServerConnection_t* conn);
 
+/**
+ * @brief Sends data reliably with automatic congestion backpressure retry.
+ *
+ * Calls krs_client_send with require_ack=true. If the congestion window is
+ * full, retries with 1ms sleep intervals until success or timeout_ms expires.
+ *
+ * @param conn        The active server connection.
+ * @param channel     Destination channel (must be >= 10).
+ * @param data        Payload bytes to send.
+ * @param length      Number of payload bytes.
+ * @param timeout_ms  Maximum time to wait for the congestion window in milliseconds.
+ *                    Pass 0 for a single attempt with no retries.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS                          Data sent.
+ * @retval KRS_ERR_NULL_POINTER                 conn or data is NULL.
+ * @retval KRS_ERR_CLIENT_NOT_CONNECTED         conn is not connected.
+ * @retval KRS_ERR_SERVER_CONGESTION_WINDOW_FULL  Timeout expired while window full.
+ * @retval KRS_ERR_NETWORK_SOCKET_ERROR         Send failed for non-congestion reason.
+ */
+Void_r krs_client_send_blocking(ServerConnection_t* conn, Channel_t channel,
+                                const uint8_t* data, uint16_t length, uint32_t timeout_ms);
+
 #endif // KRONOS_CLIENT_H
