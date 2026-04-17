@@ -10,9 +10,9 @@ PortTableLookup_r krs_lib_port_table_lookup(PortTable_t* port_table, Port_t port
     result.base.error_code = KRS_SUCCESS;
 
     if (!port_table) {
-        char* msg = "port_table is NULL";
-        KRS_LOG_ERROR(CMP_ID, "%s: { %u }", msg, port_table);
-        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "%s", msg);
+        const char* msg = "port_table is NULL";
+        KRS_LOG_ERROR(CMP_ID, "%s", msg);
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "port_table is NULL");
         return result;
     }
 
@@ -30,7 +30,7 @@ PortTableLookup_r krs_lib_port_table_lookup(PortTable_t* port_table, Port_t port
         pl = pl->next;
     }
 
-    KRS_LOG_ERROR(CMP_ID, "port was not found in port_table: { %u ; %u }", port_table, port);
+    KRS_LOG_ERROR(CMP_ID, "port was not found in port_table: { %p ; %u }", (void*)port_table, port);
 
     return result;
 }
