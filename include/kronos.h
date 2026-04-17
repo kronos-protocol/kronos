@@ -202,7 +202,8 @@ enum FrameType {
 
     CONNECTION   = 10,
     HEARTBEAT    = 11,
-    SOCKET_SETUP = 12,
+    SOCKET_SETUP  = 12,
+    DISCONNECT    = 13,
 
     SOCKET_ACK = 22,
 };
