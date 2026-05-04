@@ -1,4 +1,5 @@
 #include "kronos_server.h"
+#include "kronos_log.h"
 
 #include "server_internal.h"
 #include "iocp_internal.h"
@@ -38,6 +39,9 @@ DWORD WINAPI krs_server_iocp_io_thread(LPVOID param) {
                 msg->remote_address = ctx->remote_addr;
                 msg->port = ctx->port;
                 krs_message_queue_push(spm->message_queue, msg);
+            } else {
+                KRS_LOG_ERROR("iocp", "message pool acquire failed, dropping %lu bytes",
+                              (unsigned long)bytes_transferred);
             }
         }
 
@@ -53,13 +57,18 @@ DWORD WINAPI krs_server_iocp_io_thread(LPVOID param) {
         if (rc == SOCKET_ERROR) {
             int err = WSAGetLastError();
             if (err != WSA_IO_PENDING) {
+                KRS_LOG_WARN("iocp", "WSARecvFrom re-arm failed (err=%d), retrying once", err);
                 Sleep(1);
                 memset(&ctx->overlapped, 0, sizeof(ctx->overlapped));
                 ctx->remote_addr_len = sizeof(ctx->remote_addr);
                 ctx->flags = 0;
-                WSARecvFrom(ctx->socket, &ctx->wsabuf, 1, NULL, &ctx->flags,
-                            (struct sockaddr*)&ctx->remote_addr, &ctx->remote_addr_len,
-                            &ctx->overlapped, NULL);
+                int rc2 = WSARecvFrom(ctx->socket, &ctx->wsabuf, 1, NULL, &ctx->flags,
+                                      (struct sockaddr*)&ctx->remote_addr, &ctx->remote_addr_len,
+                                      &ctx->overlapped, NULL);
+                if (rc2 == SOCKET_ERROR && WSAGetLastError() != WSA_IO_PENDING) {
+                    KRS_LOG_ERROR("iocp", "WSARecvFrom retry also failed (err=%d), socket dead",
+                                  WSAGetLastError());
+                }
             }
         }
     }
