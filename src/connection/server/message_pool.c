@@ -1,4 +1,5 @@
 #include "message_pool_internal.h"
+#include "kronos_log.h"
 
 #include <stdlib.h>
 
@@ -9,11 +10,15 @@ MessagePool_t* krs_message_pool_create(uint32_t capacity) {
     if (capacity == 0) capacity = 256;
 
     MessagePool_t* pool = calloc(1, sizeof(MessagePool_t));
-    if (!pool) return NULL;
+    if (!pool) {
+        KRS_LOG_ERROR("message_pool", "pool struct allocation failed");
+        return NULL;
+    }
 
     pool->storage = calloc(capacity, sizeof(IncomingMessage_t));
     pool->free_stack = malloc(capacity * sizeof(IncomingMessage_t*));
     if (!pool->storage || !pool->free_stack) {
+        KRS_LOG_ERROR("message_pool", "pool storage allocation failed for capacity %u", capacity);
         free(pool->storage);
         free(pool->free_stack);
         free(pool);
