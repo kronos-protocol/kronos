@@ -1,4 +1,5 @@
 #include "kronos_server.h"
+#include "kronos_log.h"
 #include "message_queue_internal.h"
 #include "message_pool_internal.h"
 
@@ -49,12 +50,16 @@ void krs_message_queue_push(MessageQueue_t* queue, IncomingMessage_t* msg) {
             queue->head = (queue->head + 1) % queue->capacity;
             queue->count--;
             krs_message_pool_release(queue->pool, oldest);
+            KRS_LOG_WARN("message_queue", "queue full at max capacity (%zu), dropped oldest message",
+                         queue->max_capacity);
         } else {
             size_t new_cap = queue->capacity * 2;
             if (new_cap > queue->max_capacity) new_cap = queue->max_capacity;
             IncomingMessage_t** new_items = malloc(new_cap * sizeof(IncomingMessage_t*));
             if (!new_items) {
                 LeaveCriticalSection(&queue->lock);
+                KRS_LOG_ERROR("message_queue", "grow from %zu to %zu failed, dropping message",
+                              queue->capacity, new_cap);
                 krs_message_pool_release(queue->pool, msg);
                 return;
             }
