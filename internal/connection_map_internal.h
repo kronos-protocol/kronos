@@ -47,4 +47,8 @@ ConnectionMapEntry_t* krs_connection_map_get(ConnectionMap_t* map, uint32_t conn
 void krs_connection_map_remove(ConnectionMap_t* map, uint32_t connection_id);
 uint32_t krs_connection_map_get_by_address(ConnectionMap_t* map, const PortAddress_t* addr);
 
+bool krs_connection_map_acquire(ConnectionMap_t* map, uint32_t connection_id,
+                                UDPSocketDescriptor_t** desc_out, ClientConnection_t** conn_out);
+void krs_connection_map_release(ClientConnection_t* conn);
+
 #endif // CONNECTION_MAP_INTERNAL_H
