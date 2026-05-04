@@ -23,4 +23,7 @@ struct Reassembler {
     KrsArray_t* sessions;
 };
 
+#define KRS_MAX_FRAGMENTS_PER_PACKET 64u
+#define KRS_MAX_REASSEMBLY_SESSIONS  256u
+
 #endif // FRAGMENT_INTERNAL_H
