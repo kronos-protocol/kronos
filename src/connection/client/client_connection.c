@@ -4,10 +4,12 @@
 #include "kronos_packet_counter.h"
 #include "kronos_ack.h"
 #include "kronos_congestion.h"
+#include "kronos_log.h"
 
 #include "client_internal.h"
 #include "network_internal.h"
 #include "frame_metadata.h"
+#include "net_send_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -50,12 +52,14 @@ ServerConnection_t* krs_client_server_connect(PortAddress_t server_address) {
 
     UDPSocketRef_t sock = s_create_client_socket();
     if (sock == INVALID_SOCKET) {
+        KRS_LOG_WARN("client", "connect failed: client socket creation failed");
         krs_wsa_cleanup();
         return NULL;
     }
 
     FrameBuilder_c* builder = krs_frame_builder_create(0, CONNECTION);
     if (!builder) {
+        KRS_LOG_WARN("client", "connect failed: frame builder allocation failed");
         closesocket(sock);
         krs_wsa_cleanup();
         return NULL;
@@ -66,6 +70,7 @@ ServerConnection_t* krs_client_server_connect(PortAddress_t server_address) {
     krs_frame_builder_destroy(&builder);
 
     if (n == 0) {
+        KRS_LOG_WARN("client", "connect failed: CONNECTION frame serialize returned 0");
         closesocket(sock);
         krs_wsa_cleanup();
         return NULL;
@@ -78,6 +83,7 @@ ServerConnection_t* krs_client_server_connect(PortAddress_t server_address) {
     if (WSASendTo(sock, &wsabuf, 1, &sent, 0,
                   (const struct sockaddr*)&server_address, sizeof(server_address),
                   NULL, NULL) == SOCKET_ERROR) {
+        KRS_LOG_WARN("client", "connect failed: WSASendTo failed (err=%d)", WSAGetLastError());
         closesocket(sock);
         krs_wsa_cleanup();
         return NULL;
@@ -92,6 +98,7 @@ ServerConnection_t* krs_client_server_connect(PortAddress_t server_address) {
     int recv_bytes = recvfrom(sock, (char*)recv_buf, sizeof(recv_buf), 0,
                               (struct sockaddr*)&from_addr, &from_len);
     if (recv_bytes < 0) {
+        KRS_LOG_WARN("client", "connect failed: no SOCKET_ACK received (timeout or socket error)");
         closesocket(sock);
         krs_wsa_cleanup();
         return NULL;
@@ -100,6 +107,8 @@ ServerConnection_t* krs_client_server_connect(PortAddress_t server_address) {
     uint8_t body_buf[32];
     Frame_t frame = krs_frame_create(recv_buf, (uint16_t)recv_bytes, body_buf, sizeof(body_buf));
     if (frame.protocol_char != 0x4B || frame.frame_type != SOCKET_ACK || frame.body_length < 4) {
+        KRS_LOG_WARN("client", "connect failed: malformed server reply (proto=0x%02X type=%d body_len=%u)",
+                     frame.protocol_char, frame.frame_type, frame.body_length);
         closesocket(sock);
         krs_wsa_cleanup();
         return NULL;
@@ -131,17 +140,9 @@ ServerConnection_t* krs_client_server_connect(PortAddress_t server_address) {
     conn->ack_tracker = NULL;
     conn->congestion = NULL;
     conn->last_heartbeat_sent_ms = GetTickCount64();
+    conn->delivery_failure_callback = NULL;
+    conn->delivery_failure_callback_user_data = NULL;
     return conn;
-}
-
-static void s_client_send_frame(SOCKET sock, const PortAddress_t* addr,
-                                const uint8_t* frame_data, uint16_t frame_size) {
-    WSABUF wsabuf;
-    wsabuf.len = frame_size;
-    wsabuf.buf = (char*)frame_data;
-    DWORD sent;
-    WSASendTo(sock, &wsabuf, 1, &sent, 0,
-              (const struct sockaddr*)addr, sizeof(*addr), NULL, NULL);
 }
 
 Void_r krs_client_send(ServerConnection_t* conn, Channel_t channel,
@@ -206,12 +207,12 @@ Void_r krs_client_send(ServerConnection_t* conn, Channel_t channel,
                 conn->ack_tracker = krs_ack_tracker_create(1000, 5);
             }
             if (conn->ack_tracker) {
-                krs_ack_tracker_expect(conn->ack_tracker, pid, buf, n);
+                krs_ack_tracker_expect(conn->ack_tracker, pid, channel, buf, n);
             }
             LeaveCriticalSection(&conn->state_lock);
         }
 
-        s_client_send_frame(conn->socket, &conn->server_address, buf, n);
+        krs_net_send_frame(conn->socket, &conn->server_address, buf, n);
     } else {
         if (require_ack) {
             EnterCriticalSection(&conn->state_lock);
@@ -232,13 +233,13 @@ Void_r krs_client_send(ServerConnection_t* conn, Channel_t channel,
         if (require_ack && conn->ack_tracker) {
             EnterCriticalSection(&conn->state_lock);
             for (uint16_t f = 0; f < frag.fragment_count; f++) {
-                krs_ack_tracker_expect(conn->ack_tracker, pid, frag.fragments[f], frag.fragment_sizes[f]);
+                krs_ack_tracker_expect(conn->ack_tracker, pid, channel, frag.fragments[f], frag.fragment_sizes[f]);
             }
             LeaveCriticalSection(&conn->state_lock);
         }
 
         for (uint16_t f = 0; f < frag.fragment_count; f++) {
-            s_client_send_frame(conn->socket, &conn->server_address,
+            krs_net_send_frame(conn->socket, &conn->server_address,
                                 frag.fragments[f], frag.fragment_sizes[f]);
         }
         krs_fragment_result_destroy(&frag);
@@ -278,12 +279,7 @@ static void s_client_send_ack(SOCKET sock, const PortAddress_t* addr,
     krs_frame_builder_destroy(&builder);
     if (n == 0) return;
 
-    WSABUF wsabuf;
-    wsabuf.len = n;
-    wsabuf.buf = (char*)buf;
-    DWORD sent;
-    WSASendTo(sock, &wsabuf, 1, &sent, 0,
-              (const struct sockaddr*)addr, sizeof(*addr), NULL, NULL);
+    krs_net_send_frame(sock, addr, buf, n);
 }
 
 #define KRS_CLIENT_HEARTBEAT_INTERVAL_MS 5000
@@ -303,15 +299,7 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
                 uint8_t hb_buf[32];
                 uint16_t hb_n = krs_frame_builder_serialize(hb_builder, hb_buf, sizeof(hb_buf));
                 krs_frame_builder_destroy(&hb_builder);
-                if (hb_n > 0) {
-                    WSABUF hb_wsabuf;
-                    hb_wsabuf.len = hb_n;
-                    hb_wsabuf.buf = (char*)hb_buf;
-                    DWORD hb_sent;
-                    WSASendTo(conn->socket, &hb_wsabuf, 1, &hb_sent, 0,
-                              (const struct sockaddr*)&conn->server_address,
-                              sizeof(conn->server_address), NULL, NULL);
-                }
+                krs_net_send_frame(conn->socket, &conn->server_address, hb_buf, hb_n);
             }
             conn->last_heartbeat_sent_ms = now;
         }
@@ -319,7 +307,14 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
         EnterCriticalSection(&conn->state_lock);
         if (conn->ack_tracker) {
             uint64_t retry_ids[16];
-            uint32_t retry_count = krs_ack_tracker_check_timeouts(conn->ack_tracker, retry_ids, 16);
+            uint8_t  retry_channels[16];
+            uint64_t dropped_ids[16];
+            uint8_t  dropped_channels[16];
+            uint32_t dropped_count = 0;
+            uint32_t retry_count = krs_ack_tracker_check_timeouts(conn->ack_tracker,
+                                                                    retry_ids, retry_channels, NULL, 16,
+                                                                    dropped_ids, dropped_channels, 16,
+                                                                    &dropped_count);
             uint32_t to_resend = retry_count < 16 ? retry_count : 16;
 
             if (to_resend > 0 && conn->congestion) {
@@ -340,11 +335,21 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
                     actual_retries++;
                 }
             }
+
+            DeliveryFailureCallback_f failure_cb = conn->delivery_failure_callback;
+            void* failure_ud = conn->delivery_failure_callback_user_data;
+
             LeaveCriticalSection(&conn->state_lock);
 
             for (uint32_t r = 0; r < actual_retries; r++) {
-                s_client_send_frame(conn->socket, &conn->server_address,
+                krs_net_send_frame(conn->socket, &conn->server_address,
                                     retry_bufs[r], retry_sizes[r]);
+            }
+
+            if (failure_cb) {
+                for (uint32_t d = 0; d < dropped_count; d++) {
+                    failure_cb(conn->connection_id, dropped_channels[d], dropped_ids[d], failure_ud);
+                }
             }
         } else {
             LeaveCriticalSection(&conn->state_lock);
@@ -455,15 +460,7 @@ void krs_client_disconnect(ServerConnection_t** conn) {
             uint8_t dc_buf[32];
             uint16_t dc_n = krs_frame_builder_serialize(dc_builder, dc_buf, sizeof(dc_buf));
             krs_frame_builder_destroy(&dc_builder);
-            if (dc_n > 0) {
-                WSABUF dc_wsabuf;
-                dc_wsabuf.len = dc_n;
-                dc_wsabuf.buf = (char*)dc_buf;
-                DWORD dc_sent;
-                WSASendTo((*conn)->socket, &dc_wsabuf, 1, &dc_sent, 0,
-                          (const struct sockaddr*)&(*conn)->server_address,
-                          sizeof((*conn)->server_address), NULL, NULL);
-            }
+            krs_net_send_frame((*conn)->socket, &(*conn)->server_address, dc_buf, dc_n);
         }
         (*conn)->connected = false;
     }
@@ -485,4 +482,13 @@ void krs_client_disconnect(ServerConnection_t** conn) {
     free(*conn);
     *conn = NULL;
     krs_wsa_cleanup();
+}
+
+void krs_client_set_delivery_failure_callback(ServerConnection_t* conn,
+                                              DeliveryFailureCallback_f callback, void* user_data) {
+    if (!conn) return;
+    EnterCriticalSection(&conn->state_lock);
+    conn->delivery_failure_callback = callback;
+    conn->delivery_failure_callback_user_data = user_data;
+    LeaveCriticalSection(&conn->state_lock);
 }
