@@ -18,12 +18,37 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/*
+ * Lock hierarchy (SPEC v20+, post-LOCK_UNIFY):
+ *
+ *   connection_map->lock  >  desc->state_lock  >  channel_states[ch].channel_lock  >  conn->ack_lock
+ *
+ * Acquisition order: top-down. Never reverse.
+ *
+ * Resource ownership:
+ *   - desc->channel_states[ch].connections   protected by desc->state_lock
+ *   - desc->channel_states[ch].packet_counter protected by channel_lock
+ *   - desc->channel_states[ch].reassembler   protected by channel_lock
+ *   - desc->port_callback / channel_callbacks[] protected by desc->state_lock
+ *   - ClientConnection_t lifetime           refcount-gated; map_lock(shared) is a stronger guarantee
+ *   - conn->ack_tracker                      protected by conn->ack_lock
+ *   - conn->congestion                       protected by conn->cc_lock (leaf, peer of ack_lock)
+ */
+
+typedef struct EvictedConnection EvictedConnection_t;
+
+struct EvictedConnection {
+    uint32_t  connection_id;
+    Channel_t channel;
+};
+
+#define MAX_EVICTIONS_PER_CYCLE 64
+
 typedef struct ChannelState ChannelState_t;
 
 struct ChannelState {
     SRWLOCK          channel_lock;
     PacketCounter_t* packet_counter;
-    AckTracker_t*    ack_tracker;
     Reassembler_t*   reassembler;
     KrsArray_t*      connections;
 };
@@ -33,6 +58,10 @@ struct ClientConnection {
     PortAddress_t remote_address;
     uint64_t      last_heartbeat_ms;
     CongestionController_t* congestion;
+    AckTracker_t* ack_tracker;
+    SRWLOCK       ack_lock;
+    SRWLOCK       cc_lock;
+    volatile LONG refcount;
 };
 
 struct UDPSocketDescriptor {
@@ -50,6 +79,8 @@ struct UDPSocketDescriptor {
     void*                         connect_callback_user_data;
     ConnectionLifecycleCallback_f disconnect_callback;
     void*                         disconnect_callback_user_data;
+    DeliveryFailureCallback_f     delivery_failure_callback;
+    void*                         delivery_failure_callback_user_data;
 };
 
 struct ServerPortManager {
