@@ -35,7 +35,8 @@ typedef struct FrameCreateResult FrameCreate_r;
  * @brief Parses a raw UDP datagram into a frame using caller-provided stack storage for the body.
  *
  * Returns a zero-initialized Frame_t if buffer is NULL, received_bytes is less than
- * KRONOS_FRAME_HEADER_LENGTH, or the first byte is not 0x4B.
+ * KRONOS_FRAME_HEADER_LENGTH, the first byte is not 0x4B, or the encoded major
+ * version does not match the build's KRONOS_VERSION_MAJOR.
  *
  * @param buffer              Raw UDP datagram bytes.
  * @param received_bytes      Number of bytes received.
@@ -48,17 +49,23 @@ Frame_t krs_frame_create(const uint8_t* buffer, uint16_t received_bytes, uint8_t
 /**
  * @brief Parses a raw UDP datagram into a frame with explicit error handling.
  *
+ * Validates the frame magic byte AND the encoded major version. Frames
+ * with a different major version than the build's KRONOS_VERSION_MAJOR
+ * are rejected. Minor and patch differences are accepted (semver-style
+ * compatibility within a major release).
+ *
  * @param buffer              Raw UDP datagram bytes.
  * @param received_bytes      Number of bytes received.
  * @param stack_data_out      Caller-allocated buffer for frame body.
  * @param stack_data_out_size Size of stack_data_out.
  * @return FrameCreate_r containing the frame or error information.
  *
- * @retval KRS_SUCCESS                  Frame parsed successfully.
- * @retval KRS_ERR_NULL_POINTER         buffer or stack_data_out is NULL.
- * @retval KRS_ERR_FRAME_INVALID_HEADER received_bytes < KRONOS_FRAME_HEADER_LENGTH.
- * @retval KRS_ERR_FRAME_INVALID_PROTOCOL First byte is not 0x4B.
- * @retval KRS_ERR_BUFFER_TOO_SMALL     stack_data_out_size too small for body.
+ * @retval KRS_SUCCESS                       Frame parsed successfully.
+ * @retval KRS_ERR_NULL_POINTER              buffer or stack_data_out is NULL.
+ * @retval KRS_ERR_FRAME_INVALID_HEADER      received_bytes < KRONOS_FRAME_HEADER_LENGTH.
+ * @retval KRS_ERR_FRAME_INVALID_PROTOCOL    First byte is not 0x4B.
+ * @retval KRS_ERR_FRAME_UNSUPPORTED_VERSION Major version does not match build.
+ * @retval KRS_ERR_BUFFER_TOO_SMALL          stack_data_out_size too small for body.
  */
 FrameCreate_r krs_frame_create_s(const uint8_t* buffer, uint16_t received_bytes,
                                  uint8_t* stack_data_out, uint16_t stack_data_out_size);
@@ -118,7 +125,7 @@ void krs_frame_destroy(Frame_t** frame);
  *
  * @param channel  Channel number (0–255).
  * @param type     Frame type identifier.
- * @return Pointer to the new FrameBuilder_t, or NULL on allocation failure.
+ * @return Pointer to the new FrameBuilder_c, or NULL on allocation failure.
  */
 FrameBuilder_c* krs_frame_builder_create(uint8_t channel, FrameType_e type);
 
@@ -197,14 +204,35 @@ void krs_version_decode(uint8_t version, uint8_t* major, uint8_t* minor, uint8_t
  * Values 0–9 are general purpose. 10–19 are client-only. 20–29 are server-only.
  */
 enum FrameType {
+    /** @brief Acknowledgement of a packet sent with META_FLAG_ACK_REQUIRED. */
     MESSAGE_ACK   = 0,
+
+    /** @brief Application-level data frame. */
     BASIC_MESSAGE = 1,
 
+    /** @brief Client-to-server handshake on channel 0. */
     CONNECTION   = 10,
+
+    /** @brief Periodic client liveness signal on channel 1. */
     HEARTBEAT    = 11,
+
+    /**
+     * @brief Reserved frame type — no protocol effect.
+     *
+     * @warning This frame type is leftover scaffolding. It is accepted by the
+     *          parser but produces NO protocol-level behavior. The server only
+     *          sets a label on the corresponding `desc->channel_types[ch]`
+     *          slot, which is forwarded to application callbacks via the
+     *          `ChannelType_e` parameter. Application code MUST NOT rely on
+     *          SOCKET_SETUP for any behavioral distinction. Treat as opaque.
+     *          See Known Issue #17 in SPEC.md.
+     */
     SOCKET_SETUP  = 12,
+
+    /** @brief Graceful client disconnect on channel 0. */
     DISCONNECT    = 13,
 
+    /** @brief Server reply to CONNECTION carrying the assigned 32-bit connection ID. */
     SOCKET_ACK = 22,
 };
 
