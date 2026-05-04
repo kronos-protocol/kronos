@@ -23,6 +23,7 @@ add_library(kronos STATIC
         src/connection/network/udp_socket_ref_lifecycle.c
         src/connection/network/wsa_lifecycle.c
         src/connection/network/address_operations.c
+        src/connection/network/net_send.c
         src/lib/port_table/port_table_lifecycle.c
         src/lib/port_table/port_table_manipulation.c
         src/log/logging.c
@@ -295,3 +296,13 @@ target_include_directories(bench_multi PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/internal
     ${CMAKE_CURRENT_SOURCE_DIR}/bench
 )
+
+add_executable(kronos_race_test test/test_race_disconnect_send.c)
+target_link_libraries(kronos_race_test PRIVATE kronos ws2_32)
+target_include_directories(kronos_race_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/internal
+)
+
+add_executable(lossy_proxy tools/lossy_proxy/lossy_proxy.c)
+target_link_libraries(lossy_proxy PRIVATE ws2_32)
