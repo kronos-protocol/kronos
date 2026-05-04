@@ -1,3 +1,6 @@
+#include "kronos_ack.h"
+#include "kronos_congestion.h"
+
 #include "connection_map_internal.h"
 #include "server_internal.h"
 
@@ -232,4 +235,31 @@ uint32_t krs_connection_map_get_by_address(ConnectionMap_t* map, const PortAddre
         checked++;
     }
     return 0;
+}
+
+bool krs_connection_map_acquire(ConnectionMap_t* map, uint32_t connection_id,
+                                UDPSocketDescriptor_t** desc_out, ClientConnection_t** conn_out) {
+    if (!map || !desc_out || !conn_out) return false;
+
+    AcquireSRWLockShared(&map->lock);
+    ConnectionMapEntry_t* entry = krs_connection_map_get(map, connection_id);
+    if (!entry || !entry->connection) {
+        ReleaseSRWLockShared(&map->lock);
+        return false;
+    }
+
+    *desc_out = entry->descriptor;
+    *conn_out = entry->connection;
+    InterlockedIncrement(&entry->connection->refcount);
+    ReleaseSRWLockShared(&map->lock);
+    return true;
+}
+
+void krs_connection_map_release(ClientConnection_t* conn) {
+    if (!conn) return;
+    if (InterlockedDecrement(&conn->refcount) != 0) return;
+
+    krs_ack_tracker_destroy(&conn->ack_tracker);
+    krs_congestion_destroy(&conn->congestion);
+    free(conn);
 }
