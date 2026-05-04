@@ -125,3 +125,23 @@ Void_r krs_server_set_channel_range_callback(ServerPortManager_t* spm, Port_t po
     result.base = krs_lib_error_result_base_suc();
     return result;
 }
+
+Void_r krs_server_set_delivery_failure_callback(ServerPortManager_t* spm, Port_t port,
+                                                DeliveryFailureCallback_f callback, void* user_data) {
+    Void_r result = {0};
+    if (!spm) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "spm is NULL");
+        return result;
+    }
+
+    UDPSocketDescriptor_t* desc = s_get_descriptor(spm, port);
+    if (!desc) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NOT_INITIALIZED, "no descriptor for port");
+        return result;
+    }
+
+    desc->delivery_failure_callback = callback;
+    desc->delivery_failure_callback_user_data = user_data;
+    result.base = krs_lib_error_result_base_suc();
+    return result;
+}
