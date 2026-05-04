@@ -356,3 +356,112 @@ void test_reassembler_feed_duplicate_fragment(void) {
 
     krs_reassembler_destroy(&r);
 }
+
+void test_reassembler_feed_oversized_payload_rejected(void) {
+    uint8_t body[4 + KRS_MAX_PAYLOAD_PER_FRAGMENT + 1];
+    body[0] = 0; body[1] = 0;
+    body[2] = 0; body[3] = 2;
+    memset(body + 4, 0xAB, KRS_MAX_PAYLOAD_PER_FRAGMENT + 1);
+
+    Frame_t f = {0};
+    f.packet_id = 500;
+    f.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
+    f.body = body;
+    f.body_length = sizeof(body);
+
+    Reassembler_t* r = krs_reassembler_create();
+    TEST_ASSERT_NOT_NULL(r);
+
+    ReassembleResult_t result = krs_reassembler_feed(r, &f);
+    TEST_ASSERT_FALSE(result.base.valid);
+    TEST_ASSERT_FALSE(result.complete);
+    TEST_ASSERT_NULL(result.data);
+
+    TEST_ASSERT_EQUAL_UINT32(0, krs_array_length(r->sessions));
+
+    krs_reassembler_destroy(&r);
+}
+
+void test_reassembler_feed_exact_max_payload_accepted(void) {
+    uint8_t body[4 + KRS_MAX_PAYLOAD_PER_FRAGMENT];
+    body[0] = 0; body[1] = 0;
+    body[2] = 0; body[3] = 2;
+    memset(body + 4, 0x7E, KRS_MAX_PAYLOAD_PER_FRAGMENT);
+
+    Frame_t f = {0};
+    f.packet_id = 501;
+    f.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
+    f.body = body;
+    f.body_length = sizeof(body);
+
+    Reassembler_t* r = krs_reassembler_create();
+    TEST_ASSERT_NOT_NULL(r);
+
+    ReassembleResult_t result = krs_reassembler_feed(r, &f);
+    TEST_ASSERT_TRUE(result.base.valid);
+    TEST_ASSERT_FALSE(result.complete);
+
+    TEST_ASSERT_EQUAL_UINT32(1, krs_array_length(r->sessions));
+
+    krs_reassembler_destroy(&r);
+}
+
+void test_reassembler_rejects_oversized_total(void) {
+    Reassembler_t* r = krs_reassembler_create();
+    TEST_ASSERT_NOT_NULL(r);
+
+    uint8_t body[1500];
+    body[0] = 0;
+    body[1] = 0;
+    body[2] = (uint8_t)((KRS_MAX_FRAGMENTS_PER_PACKET + 1) >> 8);
+    body[3] = (uint8_t)((KRS_MAX_FRAGMENTS_PER_PACKET + 1) & 0xFF);
+
+    Frame_t frame = {0};
+    frame.protocol_char = 0x4B;
+    frame.channel = 10;
+    frame.frame_type = BASIC_MESSAGE;
+    frame.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
+    frame.packet_id = 12345;
+    frame.body_length = 4;
+    frame.body = body;
+
+    ReassembleResult_t result = krs_reassembler_feed(r, &frame);
+    TEST_ASSERT_FALSE(result.base.valid);
+    TEST_ASSERT_EQUAL_INT(KRS_ERR_INVALID_PARAMETER, result.base.error_code);
+
+    krs_reassembler_destroy(&r);
+}
+
+void test_reassembler_rejects_when_session_cap_reached(void) {
+    Reassembler_t* r = krs_reassembler_create();
+    TEST_ASSERT_NOT_NULL(r);
+
+    uint8_t body[16];
+    body[0] = 0;
+    body[1] = 0;
+    body[2] = 0;
+    body[3] = 8;
+    for (int i = 4; i < 16; i++) body[i] = 0xCC;
+
+    Frame_t frame = {0};
+    frame.protocol_char = 0x4B;
+    frame.channel = 10;
+    frame.frame_type = BASIC_MESSAGE;
+    frame.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
+    frame.body_length = 16;
+    frame.body = body;
+
+    for (uint32_t i = 0; i < KRS_MAX_REASSEMBLY_SESSIONS; i++) {
+        frame.packet_id = 1000 + i;
+        ReassembleResult_t res = krs_reassembler_feed(r, &frame);
+        TEST_ASSERT_TRUE(res.base.valid);
+        TEST_ASSERT_FALSE(res.complete);
+    }
+
+    frame.packet_id = 999999;
+    ReassembleResult_t over = krs_reassembler_feed(r, &frame);
+    TEST_ASSERT_FALSE(over.base.valid);
+    TEST_ASSERT_EQUAL_INT(KRS_ERR_MEMORY_ALLOCATION, over.base.error_code);
+
+    krs_reassembler_destroy(&r);
+}

@@ -241,7 +241,8 @@ void test_set_channel_callback_and_verify(void) {
     ServerPortManager_t* spm = s_make_spm();
     TEST_ASSERT_NOT_NULL(spm);
 
-    krs_server_port_manager_port_add(spm, 18888);
+    Void_r port_r = krs_server_port_manager_port_add(spm, 18888);
+    TEST_ASSERT_TRUE(port_r.base.valid);
 
     int user_data = 99;
     Void_r r = krs_server_set_channel_callback(spm, 18888, 15, s_dummy_callback, &user_data);
@@ -264,7 +265,8 @@ void test_set_port_callback_and_verify(void) {
     ServerPortManager_t* spm = s_make_spm();
     TEST_ASSERT_NOT_NULL(spm);
 
-    krs_server_port_manager_port_add(spm, 18889);
+    Void_r port_r = krs_server_port_manager_port_add(spm, 18889);
+    TEST_ASSERT_TRUE(port_r.base.valid);
 
     int user_data = 77;
     Void_r r = krs_server_set_port_callback(spm, 18889, s_dummy_callback, &user_data);

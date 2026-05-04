@@ -162,3 +162,48 @@ void test_frame_metadata_flag_count(void) {
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, KRS_METADATA_FLAG_POSITION_SIZE[META_FLAG_PRIORITY], "PRIORITY size should be 1");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(8, KRS_METADATA_FLAG_POSITION_SIZE[META_FLAG_TIMESTAMP], "TIMESTAMP size should be 8");
 }
+
+void test_frame_create_rejects_different_major_version(void) {
+    uint8_t raw[KRONOS_FRAME_HEADER_LENGTH + 4];
+    uint8_t payload[] = {0x11, 0x22, 0x33, 0x44};
+    make_valid_frame(raw, sizeof(raw), 5, BASIC_MESSAGE, 42, payload, 4);
+    raw[1] = krs_version_encode(2, 0, 0);
+
+    uint8_t body_buf[64];
+    Frame_t frame = krs_frame_create(raw, sizeof(raw), body_buf, sizeof(body_buf));
+
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x00, frame.protocol_char,
+                                   "Frame with different major version should be rejected");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, frame.channel,
+                                    "Rejected frame should have zero channel");
+}
+
+void test_frame_create_accepts_same_major_different_minor_patch(void) {
+    uint8_t raw[KRONOS_FRAME_HEADER_LENGTH + 4];
+    uint8_t payload[] = {0x55, 0x66, 0x77, 0x88};
+    make_valid_frame(raw, sizeof(raw), 9, BASIC_MESSAGE, 7, payload, 4);
+    raw[1] = krs_version_encode(KRONOS_VERSION_MAJOR, 7, 3);
+
+    uint8_t body_buf[64];
+    Frame_t frame = krs_frame_create(raw, sizeof(raw), body_buf, sizeof(body_buf));
+
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x4B, frame.protocol_char,
+                                   "Frame with same major but different minor/patch should be accepted");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(9, frame.channel,
+                                    "Accepted frame should have correct channel");
+}
+
+void test_frame_create_s_returns_unsupported_version_error(void) {
+    uint8_t raw[KRONOS_FRAME_HEADER_LENGTH + 2];
+    uint8_t payload[] = {0xAA, 0xBB};
+    make_valid_frame(raw, sizeof(raw), 4, BASIC_MESSAGE, 1, payload, 2);
+    raw[1] = krs_version_encode(7, 0, 0);
+
+    uint8_t body_buf[64];
+    FrameCreate_r result = krs_frame_create_s(raw, sizeof(raw), body_buf, sizeof(body_buf));
+
+    TEST_ASSERT_FALSE_MESSAGE(result.base.valid,
+                              "Result should be invalid for major-version mismatch");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(KRS_ERR_FRAME_UNSUPPORTED_VERSION, result.base.error_code,
+                                  "Error code should be KRS_ERR_FRAME_UNSUPPORTED_VERSION");
+}

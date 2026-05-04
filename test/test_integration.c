@@ -37,7 +37,8 @@ void test_integration_server_client_roundtrip(void) {
     ServerPortManager_t* spm = krs_server_port_manager_create(addr);
     TEST_ASSERT_NOT_NULL(spm);
 
-    krs_server_port_manager_port_add(spm, 19999);
+    Void_r port_r = krs_server_port_manager_port_add(spm, 19999);
+    TEST_ASSERT_TRUE(port_r.base.valid);
 
     Void_r cb_r = krs_server_set_port_callback(spm, 19999, s_integ_callback, NULL);
     TEST_ASSERT_TRUE(cb_r.base.valid);
@@ -93,7 +94,8 @@ void test_integration_server_sends_to_client(void) {
     Address_t addr = krs_network_address_ipv4_create("127.0.0.1");
     ServerPortManager_t* spm = krs_server_port_manager_create(addr);
     TEST_ASSERT_NOT_NULL(spm);
-    krs_server_port_manager_port_add(spm, 19998);
+    Void_r port_r = krs_server_port_manager_port_add(spm, 19998);
+    TEST_ASSERT_TRUE(port_r.base.valid);
     krs_server_set_port_callback(spm, 19998, s_integ_callback, NULL);
     krs_server_start(spm);
 
@@ -126,6 +128,62 @@ void test_integration_server_sends_to_client(void) {
     krs_wsa_cleanup();
 }
 
+static volatile uint32_t s_delivery_failures_observed = 0;
+static uint64_t s_last_failed_packet_id = 0;
+static Channel_t s_last_failed_channel = 0;
+
+static void s_on_delivery_failure(uint32_t connection_id, Channel_t channel,
+                                  uint64_t packet_id, void* user_data) {
+    (void)connection_id; (void)user_data;
+    s_last_failed_packet_id = packet_id;
+    s_last_failed_channel = channel;
+    InterlockedIncrement((volatile LONG*)&s_delivery_failures_observed);
+}
+
+void test_integration_delivery_failure_callback(void) {
+    s_delivery_failures_observed = 0;
+    s_last_failed_packet_id = 0;
+    s_last_failed_channel = 0;
+
+    krs_wsa_init();
+
+    uint16_t port = 29301;
+    Address_t addr = krs_network_address_ipv4_create("127.0.0.1");
+    ServerPortManager_t* spm = krs_server_port_manager_create(addr);
+    TEST_ASSERT_NOT_NULL(spm);
+
+    Void_r pa = krs_server_port_manager_port_add(spm, port);
+    TEST_ASSERT_TRUE(pa.base.valid);
+
+    Void_r cb = krs_server_set_delivery_failure_callback(spm, port,
+                                                          s_on_delivery_failure, NULL);
+    TEST_ASSERT_TRUE(cb.base.valid);
+
+    krs_server_start(spm);
+
+    PortAddress_t sa = krs_network_port_address_create(port, addr);
+    ServerConnection_t* client = krs_client_server_connect(sa);
+    TEST_ASSERT_NOT_NULL(client);
+
+    Sleep(200);
+
+    uint8_t payload[16];
+    memset(payload, 0xA5, sizeof(payload));
+
+    Void_r sr = krs_server_send(spm, client->connection_id, 15, payload, sizeof(payload), true);
+    TEST_ASSERT_TRUE(sr.base.valid);
+
+    Sleep(7000);
+
+    TEST_ASSERT_TRUE(s_delivery_failures_observed >= 1);
+    TEST_ASSERT_EQUAL_UINT8(15, s_last_failed_channel);
+
+    krs_client_disconnect(&client);
+    krs_server_stop(spm);
+    krs_server_port_manager_destroy(&spm);
+    krs_wsa_cleanup();
+}
+
 static volatile int s_connect_count = 0;
 static volatile int s_disconnect_count = 0;
 static uint32_t s_connected_id = 0;
@@ -151,7 +209,8 @@ void test_integration_connect_disconnect_lifecycle(void) {
     Address_t addr = krs_network_address_ipv4_create("127.0.0.1");
     ServerPortManager_t* spm = krs_server_port_manager_create(addr);
     TEST_ASSERT_NOT_NULL(spm);
-    krs_server_port_manager_port_add(spm, 19997);
+    Void_r port_r = krs_server_port_manager_port_add(spm, 19997);
+    TEST_ASSERT_TRUE(port_r.base.valid);
     krs_server_set_port_callback(spm, 19997, s_integ_callback, NULL);
     krs_server_set_connect_callback(spm, 19997, s_on_connect, NULL);
     krs_server_set_disconnect_callback(spm, 19997, s_on_disconnect, NULL);
