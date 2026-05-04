@@ -1,14 +1,18 @@
 #include "kronos_server.h"
-#include "kronos_congestion.h"
+#include "kronos_log.h"
 
 #include "server_internal.h"
+#include "connection_map_internal.h"
 
 #include <stdlib.h>
 
 
 UDPSocketDescriptor_t* krs_server_udp_socket_handler_create(PortAddress_t port_address) {
     UDPSocketDescriptor_t* udp_socket_handler = calloc(1, sizeof(UDPSocketDescriptor_t));
-    if (!udp_socket_handler) return NULL;
+    if (!udp_socket_handler) {
+        KRS_LOG_ERROR("socket_handler", "descriptor allocation failed");
+        return NULL;
+    }
 
     InitializeSRWLock(&udp_socket_handler->state_lock);
     for (uint32_t ch = 0; ch <= MAX_CHANNEL_NUMBER; ch++) {
@@ -16,6 +20,8 @@ UDPSocketDescriptor_t* krs_server_udp_socket_handler_create(PortAddress_t port_a
     }
     udp_socket_handler->udp_socket_ref = krs_network_udp_socket_ref_create(port_address);
     if (udp_socket_handler->udp_socket_ref == INVALID_SOCKET) {
+        KRS_LOG_ERROR("socket_handler", "UDP socket creation failed for port %u",
+                      port_address.sin6_port);
         free(udp_socket_handler);
         return NULL;
     }
@@ -30,16 +36,12 @@ void krs_server_udp_socket_handler_destroy(UDPSocketDescriptor_t** socket_handle
     for (uint32_t ch = 0; ch <= MAX_CHANNEL_NUMBER; ch++) {
         ChannelState_t* state = &desc->channel_states[ch];
         krs_packet_counter_destroy(&state->packet_counter);
-        krs_ack_tracker_destroy(&state->ack_tracker);
         krs_reassembler_destroy(&state->reassembler);
         if (state->connections) {
             uint32_t count = krs_array_length(state->connections);
             for (uint32_t i = 0; i < count; i++) {
                 ClientConnection_t* conn = KRS_ARRAY_GET(state->connections, i, ClientConnection_t);
-                if (conn) {
-                    krs_congestion_destroy(&conn->congestion);
-                }
-                free(conn);
+                krs_connection_map_release(conn);
             }
             krs_array_destroy(&state->connections);
         }
