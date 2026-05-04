@@ -107,9 +107,12 @@ void krs_reassembler_destroy(Reassembler_t** reassembler);
  * @param fragment     Parsed Kronos frame (may or may not be a fragment).
  * @return ReassembleResult_t. When complete, caller owns result.data and must free() it.
  *
- * @retval KRS_SUCCESS                Complete or partial reassembly succeeded.
- * @retval KRS_ERR_NULL_POINTER       reassembler or fragment is NULL.
- * @retval KRS_ERR_MEMORY_ALLOCATION  Buffer allocation failed.
+ * @retval KRS_SUCCESS                       Complete or partial reassembly succeeded.
+ * @retval KRS_ERR_NULL_POINTER              reassembler or fragment is NULL.
+ * @retval KRS_ERR_INVALID_PARAMETER         Fragment body too small for fragment header,
+ *                                           or invalid fragment index/total.
+ * @retval KRS_ERR_FRAGMENT_PAYLOAD_OVERSIZED Fragment payload exceeds KRS_MAX_PAYLOAD_PER_FRAGMENT.
+ * @retval KRS_ERR_MEMORY_ALLOCATION         Buffer or session allocation failed.
  */
 ReassembleResult_t krs_reassembler_feed(Reassembler_t* reassembler, const Frame_t* fragment);
 

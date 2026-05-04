@@ -19,16 +19,54 @@ typedef struct ClientConnection ClientConnection_t;
  * @param connection_id  The connection ID of the connecting/disconnecting client.
  * @param channel        The channel on which the connection event occurred.
  * @param user_data      User-supplied context pointer.
+ *
+ * @note This callback runs on a server protocol thread. Do not call Kronos
+ *       send APIs synchronously from inside the callback — doing so may
+ *       deadlock against per-connection locks held by the caller.
  */
 typedef void (*ConnectionLifecycleCallback_f)(uint32_t connection_id, Channel_t channel, void* user_data);
 
 /**
+ * @brief Callback invoked when a reliable message is permanently dropped.
+ *
+ * Fired when a packet with `require_ack=true` exceeds `max_retries` (5)
+ * without receiving an ACK. The application is notified exactly once per
+ * dropped packet. The callback runs on a protocol thread and MUST NOT
+ * call Kronos send APIs synchronously.
+ *
+ * As of Phase 8.28, both `connection_id` and `channel` are accurate on
+ * both server and client sides. The server reads `connection_id` from
+ * the dropping connection itself; `channel` is the channel the message
+ * was sent on, preserved per-AckEntry. The client receives its own
+ * `connection_id` (assigned at handshake) and the per-entry channel.
+ *
+ * @param connection_id  The connection whose packet was dropped.
+ * @param channel        The channel the dropped packet was sent on.
+ * @param packet_id      Packet ID assigned when the message was sent.
+ * @param user_data      User-supplied context pointer.
+ */
+typedef void (*DeliveryFailureCallback_f)(uint32_t connection_id,
+                                          Channel_t channel,
+                                          uint64_t packet_id,
+                                          void* user_data);
+
+/**
  * @brief Callback invoked when a message arrives on a port or channel.
  *
+ * @warning The `data` pointer is valid ONLY for the duration of this callback.
+ *          Do not retain it. If the user needs the payload after returning,
+ *          they must copy `data[0..data_length]` into their own buffer.
+ *          On server side, `data` may alias a stack buffer in the message-handler
+ *          thread or a heap buffer owned by the reassembler that is freed
+ *          immediately after this callback returns. The same applies on the
+ *          client receive thread.
+ *
  * @param channel        Channel on which the message arrived.
- * @param channel_type   Operating mode of the channel.
+ * @param channel_type   Channel-type label (see ChannelType_e). Currently
+ *                       carries no protocol semantics — passed through verbatim.
  * @param connection_id  Identifier of the sending connection (0 if unknown).
- * @param data           Pointer to the message payload bytes.
+ * @param data           Pointer to the message payload bytes. Valid only
+ *                       for the duration of this callback.
  * @param data_length    Number of payload bytes.
  * @param user_data      User-supplied context pointer registered with the callback.
  */
@@ -58,21 +96,38 @@ void krs_server_port_manager_destroy(ServerPortManager_t** spm);
  * @brief Adds a port to the server using the manager's default address.
  *
  * Creates a UDPSocketDescriptor_t, opens and binds a UDP socket, and registers
- * the descriptor in the port table.
+ * the descriptor in the port table. On failure, any acquired resources are
+ * released before returning.
  *
  * @param spm   The server port manager.
  * @param port  The port number to add.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS                  Port added successfully.
+ * @retval KRS_ERR_NULL_POINTER         spm is NULL or invalid.
+ * @retval KRS_ERR_SERVER_BIND_FAILED   Socket creation or bind failed.
+ * @retval KRS_ERR_MEMORY_ALLOCATION    Descriptor list growth failed.
  */
-void krs_server_port_manager_port_add(ServerPortManager_t* spm, Port_t port);
+Void_r krs_server_port_manager_port_add(ServerPortManager_t* spm, Port_t port);
 
 /**
  * @brief Adds a port to the server using an explicit address.
  *
+ * Creates a UDPSocketDescriptor_t, opens and binds a UDP socket at the given
+ * address, and registers the descriptor in the port table. On failure, any
+ * acquired resources are released before returning.
+ *
  * @param spm      The server port manager.
  * @param port     The port number to add.
  * @param address  The address to bind this port to.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS                  Port added successfully.
+ * @retval KRS_ERR_NULL_POINTER         spm is NULL or invalid.
+ * @retval KRS_ERR_SERVER_BIND_FAILED   Socket creation or bind failed.
+ * @retval KRS_ERR_MEMORY_ALLOCATION    Descriptor list growth failed.
  */
-void krs_server_port_manager_port_add_with_address(ServerPortManager_t* spm, Port_t port, Address_t address);
+Void_r krs_server_port_manager_port_add_with_address(ServerPortManager_t* spm, Port_t port, Address_t address);
 
 /**
  * @brief Creates a UDP socket descriptor for the given port address.
@@ -141,10 +196,13 @@ Void_r krs_server_set_channel_callback(ServerPortManager_t* spm, Port_t port, Ch
  * @param require_ack    If true, registers the packet for ACK tracking.
  * @return Void_r indicating success or failure.
  *
- * @retval KRS_SUCCESS                  Data sent.
- * @retval KRS_ERR_NULL_POINTER         spm or data is NULL.
- * @retval KRS_ERR_INVALID_PARAMETER    connection_id not found.
- * @retval KRS_ERR_NETWORK_SOCKET_ERROR Send failed.
+ * @retval KRS_SUCCESS                            Data sent.
+ * @retval KRS_ERR_NULL_POINTER                   spm or data is NULL.
+ * @retval KRS_ERR_NOT_INITIALIZED                Server not started (no connection map).
+ * @retval KRS_ERR_INVALID_PARAMETER              connection_id not found.
+ * @retval KRS_ERR_SERVER_CONGESTION_WINDOW_FULL  require_ack=true and congestion window is full.
+ * @retval KRS_ERR_MEMORY_ALLOCATION              Frame builder or fragmentation allocation failed.
+ * @retval KRS_ERR_NETWORK_SOCKET_ERROR           Frame serialization failed (single-frame path).
  */
 Void_r krs_server_send(ServerPortManager_t* spm, uint32_t connection_id, Channel_t channel,
                        const uint8_t* data, uint16_t length, bool require_ack);
@@ -268,10 +326,13 @@ ServerStats_t krs_server_get_stats(const ServerPortManager_t* spm);
  * @param timeout_ms     Maximum time to wait in milliseconds. Pass 0 for single attempt.
  * @return Void_r indicating success or failure.
  *
- * @retval KRS_SUCCESS                          Data sent.
- * @retval KRS_ERR_NULL_POINTER                 spm or data is NULL.
- * @retval KRS_ERR_INVALID_PARAMETER            connection_id not found.
- * @retval KRS_ERR_SERVER_CONGESTION_WINDOW_FULL  Timeout expired while window full.
+ * @retval KRS_SUCCESS                            Data sent.
+ * @retval KRS_ERR_NULL_POINTER                   spm or data is NULL.
+ * @retval KRS_ERR_NOT_INITIALIZED                Server not started (no connection map).
+ * @retval KRS_ERR_INVALID_PARAMETER              connection_id not found.
+ * @retval KRS_ERR_SERVER_CONGESTION_WINDOW_FULL  Timeout expired while window remained full.
+ * @retval KRS_ERR_MEMORY_ALLOCATION              Frame builder or fragmentation allocation failed.
+ * @retval KRS_ERR_NETWORK_SOCKET_ERROR           Frame serialization failed (single-frame path).
  */
 Void_r krs_server_send_blocking(ServerPortManager_t* spm, uint32_t connection_id,
                                 Channel_t channel, const uint8_t* data,
@@ -294,11 +355,30 @@ Void_r krs_server_send_blocking(ServerPortManager_t* spm, uint32_t connection_id
  *
  * @retval KRS_SUCCESS                  All callbacks registered.
  * @retval KRS_ERR_NULL_POINTER         spm is NULL.
- * @retval KRS_ERR_INVALID_PARAMETER    from_channel < 10, to_channel < from_channel, or channel > 255.
+ * @retval KRS_ERR_INVALID_PARAMETER    from_channel < 10, or to_channel < from_channel.
  * @retval KRS_ERR_NOT_INITIALIZED      No descriptor found for the given port.
  */
 Void_r krs_server_set_channel_range_callback(ServerPortManager_t* spm, Port_t port,
                                              Channel_t from_channel, Channel_t to_channel,
                                              ChannelMessageCallback_f callback, void* user_data);
+
+/**
+ * @brief Registers a callback invoked when a reliable message is permanently dropped.
+ *
+ * Must be called before krs_server_start(). Fires once per dropped message
+ * after `max_retries` (5) unsuccessful retransmission attempts.
+ *
+ * @param spm        The server port manager.
+ * @param port       The port whose descriptor receives the callback.
+ * @param callback   Callback function pointer.
+ * @param user_data  Caller-supplied context.
+ * @return Void_r indicating success or failure.
+ *
+ * @retval KRS_SUCCESS              Callback registered.
+ * @retval KRS_ERR_NULL_POINTER     spm is NULL.
+ * @retval KRS_ERR_NOT_INITIALIZED  No descriptor for port.
+ */
+Void_r krs_server_set_delivery_failure_callback(ServerPortManager_t* spm, Port_t port,
+                                                DeliveryFailureCallback_f callback, void* user_data);
 
 #endif // KRONOS_SERVER_H

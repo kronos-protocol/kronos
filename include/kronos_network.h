@@ -30,7 +30,7 @@ typedef uint16_t Port_t;
 /** @brief Associates a socket handle with its port number. */
 typedef struct UDPSocketRefPort UDPSocketRefPort_t;
 
-/** @brief Channel operating mode. */
+/** @brief Channel-type label (see enum ChannelType for current semantics). */
 typedef enum ChannelType ChannelType_e;
 
 struct UDPSocketRefPort {
@@ -44,11 +44,24 @@ struct AddressCreateResult {
 };
 
 /**
- * @brief Channel operating mode — controls how the server handles messages on a channel.
+ * @brief Application-visible channel-type label.
  *
- * OPEN_CHANNEL    — No connection tracking; messages are processed and discarded.
- * MESSAGE_CHANNEL — Request/response datagram mode with optional ACK.
- * SOCKET_CHANNEL  — WebSocket-like persistent connection with per-client tracking.
+ * @warning This enum carries NO protocol semantics. The server passes the
+ *          per-channel label verbatim to application callbacks via
+ *          `ChannelMessageCallback_f`. The label is set only by the
+ *          (functionally inert) `SOCKET_SETUP` frame handler. Applications
+ *          MUST NOT rely on this value or branch on it for protocol
+ *          decisions. See Known Issue #17 in SPEC.md.
+ *
+ * The server treats every channel uniformly with respect to connection
+ * tracking, broadcasting, send-by-ID, and lifecycle callbacks. The value is
+ * initialised to OPEN_CHANNEL, may be flipped to SOCKET_CHANNEL by a
+ * SOCKET_SETUP frame (purely as a relabel — see frame type 12), and is
+ * forwarded as-is via the `channel_type` parameter of ChannelMessageCallback_f.
+ *
+ * OPEN_CHANNEL    — Default value assigned when a port is initialised.
+ * MESSAGE_CHANNEL — Reserved label, currently unused by the protocol.
+ * SOCKET_CHANNEL  — Set by SOCKET_SETUP frames; carries no extra semantics.
  */
 enum ChannelType {
     OPEN_CHANNEL,
