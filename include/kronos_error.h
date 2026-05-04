@@ -38,6 +38,7 @@ enum KronosError {
     KRS_ERR_FRAME_INVALID_TYPE        = 104,
     KRS_ERR_FRAME_BODY_TOO_LARGE      = 105,
     KRS_ERR_FRAME_ALREADY_FREED       = 106,
+    KRS_ERR_FRAGMENT_PAYLOAD_OVERSIZED = 107,
 
     KRS_ERR_NETWORK_INVALID_IP        = 200,
     KRS_ERR_NETWORK_INVALID_PORT      = 201,
@@ -115,7 +116,7 @@ const char* krs_error_get_message(krs_error_t error);
  * @brief Returns the category of a given error code.
  *
  * @param error  The error code to categorize.
- * @return The krs_error_category_t indicating which numeric range the error belongs to.
+ * @return The KronosErrorCategory_e indicating which numeric range the error belongs to.
  */
 KronosErrorCategory_e krs_error_get_category(krs_error_t error);
 
