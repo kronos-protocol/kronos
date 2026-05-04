@@ -351,14 +351,25 @@ ReassembleResult_t krs_reassembler_feed(Reassembler_t* reassembler, const Frame_
     uint16_t payload_size = (uint16_t)(fragment->body_length - 4);
     const uint8_t* payload = fragment->body + 4;
 
-    if (total == 0 || index >= total) {
+    if (total == 0 || index >= total || total > KRS_MAX_FRAGMENTS_PER_PACKET) {
         result.base = krs_lib_error_result_base_w_msg(KRS_ERR_INVALID_PARAMETER,
-                                                       "invalid fragment index/total");
+                                                       "invalid fragment index/total or exceeds max");
+        return result;
+    }
+
+    if (payload_size > KRS_MAX_PAYLOAD_PER_FRAGMENT) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_FRAGMENT_PAYLOAD_OVERSIZED,
+                                                       "fragment payload exceeds per-fragment maximum");
         return result;
     }
 
     FragmentSession_t* session = s_find_session(reassembler, fragment->packet_id);
     if (!session) {
+        if (krs_array_length(reassembler->sessions) >= KRS_MAX_REASSEMBLY_SESSIONS) {
+            result.base = krs_lib_error_result_base_w_msg(KRS_ERR_MEMORY_ALLOCATION,
+                                                           "reassembler session limit reached");
+            return result;
+        }
         session = s_create_session(reassembler, fragment->packet_id, total);
         if (!session) {
             result.base = krs_lib_error_result_base_w_msg(KRS_ERR_MEMORY_ALLOCATION,
