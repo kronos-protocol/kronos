@@ -69,7 +69,13 @@ int main(void) {
         return 1;
     }
 
-    krs_server_port_manager_port_add(s_spm, DEMO_PORT);
+    Void_r port_r = krs_server_port_manager_port_add(s_spm, DEMO_PORT);
+    if (!port_r.base.valid) {
+        printf("Failed to add port %d: %s\n", DEMO_PORT,
+               port_r.base.error_message ? port_r.base.error_message : "unknown");
+        krs_server_port_manager_destroy(&s_spm);
+        return 1;
+    }
     krs_server_set_port_callback(s_spm, DEMO_PORT, s_on_message, NULL);
     krs_server_set_connect_callback(s_spm, DEMO_PORT, s_on_connect, NULL);
     krs_server_set_disconnect_callback(s_spm, DEMO_PORT, s_on_disconnect, NULL);
