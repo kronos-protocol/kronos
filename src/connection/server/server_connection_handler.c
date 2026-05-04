@@ -1,8 +1,10 @@
 #include "kronos_server.h"
 #include "kronos.h"
+#include "kronos_log.h"
 
 #include "server_internal.h"
 #include "connection_map_internal.h"
+#include "net_send_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -32,12 +34,7 @@ static void s_send_frame(UDPSocketRef_t socket, const PortAddress_t* addr,
 
     if (n == 0) return;
 
-    WSABUF wsabuf;
-    wsabuf.len = n;
-    wsabuf.buf = (char*)buf;
-    DWORD sent;
-    WSASendTo(socket, &wsabuf, 1, &sent, 0,
-              (const struct sockaddr*)addr, sizeof(*addr), NULL, NULL);
+    krs_net_send_frame(socket, addr, buf, n);
 }
 
 void krs_server_handle_connection_frame(ServerPortManager_t* spm,
@@ -49,7 +46,7 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
     Channel_t requested_channel = (frame->body && frame->body_length >= 1) ? frame->body[0] : 0;
 
     ChannelState_t* state = &descriptor->channel_states[requested_channel];
-    AcquireSRWLockExclusive(&state->channel_lock);
+    AcquireSRWLockExclusive(&descriptor->state_lock);
     if (!state->connections) {
         state->connections = krs_array_create(8);
     }
@@ -60,7 +57,7 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
             if (existing && krs_network_port_address_equals(&existing->remote_address, remote_addr)) {
                 existing->last_heartbeat_ms = GetTickCount64();
                 uint32_t existing_id = existing->connection_id;
-                ReleaseSRWLockExclusive(&state->channel_lock);
+                ReleaseSRWLockExclusive(&descriptor->state_lock);
 
                 uint8_t ack_body[4];
                 ack_body[0] = (uint8_t)((existing_id >> 24) & 0xFF);
@@ -75,7 +72,9 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
 
     ClientConnection_t* conn = malloc(sizeof(ClientConnection_t));
     if (!conn) {
-        ReleaseSRWLockExclusive(&state->channel_lock);
+        ReleaseSRWLockExclusive(&descriptor->state_lock);
+        KRS_LOG_ERROR("server_conn_handler", "ClientConnection allocation failed on channel %u",
+                      requested_channel);
         return;
     }
 
@@ -83,13 +82,19 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
     conn->remote_address = *remote_addr;
     conn->last_heartbeat_ms = GetTickCount64();
     conn->congestion = NULL;
+    conn->ack_tracker = NULL;
+    InitializeSRWLock(&conn->ack_lock);
+    InitializeSRWLock(&conn->cc_lock);
+    conn->refcount = 1;
 
     if (!state->connections || krs_array_push(state->connections, conn).base.error_code != KRS_SUCCESS) {
-        ReleaseSRWLockExclusive(&state->channel_lock);
+        ReleaseSRWLockExclusive(&descriptor->state_lock);
+        KRS_LOG_ERROR("server_conn_handler", "failed to register connection on channel %u (push or NULL list)",
+                      requested_channel);
         free(conn);
         return;
     }
-    ReleaseSRWLockExclusive(&state->channel_lock);
+    ReleaseSRWLockExclusive(&descriptor->state_lock);
 
     if (spm->connection_map) {
         AcquireSRWLockExclusive(&spm->connection_map->lock);
@@ -118,7 +123,7 @@ void krs_server_handle_heartbeat_frame(UDPSocketDescriptor_t* descriptor,
 
     uint64_t now = GetTickCount64();
 
-    AcquireSRWLockExclusive(&descriptor->state_lock);
+    AcquireSRWLockShared(&descriptor->state_lock);
     for (uint32_t ch = 0; ch <= MAX_CHANNEL_NUMBER; ch++) {
         KrsArray_t* conns = descriptor->channel_states[ch].connections;
         if (!conns) continue;
@@ -131,5 +136,5 @@ void krs_server_handle_heartbeat_frame(UDPSocketDescriptor_t* descriptor,
             }
         }
     }
-    ReleaseSRWLockExclusive(&descriptor->state_lock);
+    ReleaseSRWLockShared(&descriptor->state_lock);
 }
