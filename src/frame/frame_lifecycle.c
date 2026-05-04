@@ -14,6 +14,7 @@ static Frame_t s_create_frame(const uint8_t* buffer, const uint16_t received_byt
     if (buffer == NULL || frame_data_out == NULL) return invalid;
     if (received_bytes < KRONOS_FRAME_HEADER_LENGTH) return invalid;
     if ((uint8_t)buffer[0] != 0x4B) return invalid;
+    if (((buffer[1] >> 5) & 0x07u) != KRONOS_VERSION_MAJOR) return invalid;
 
     uint16_t data_length = krs_frame_calculate_body_length(received_bytes);
     if (stack_data_out_size < data_length) return invalid;
@@ -49,6 +50,10 @@ FrameCreate_r krs_frame_create_s(const uint8_t* buffer, uint16_t received_bytes,
     }
     if (buffer[0] != 0x4B) {
         result.base = krs_lib_error_result_base_w_msg(KRS_ERR_FRAME_INVALID_PROTOCOL, "first byte is not 0x4B");
+        return result;
+    }
+    if (((buffer[1] >> 5) & 0x07u) != KRONOS_VERSION_MAJOR) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_FRAME_UNSUPPORTED_VERSION, "frame major version does not match build");
         return result;
     }
 
