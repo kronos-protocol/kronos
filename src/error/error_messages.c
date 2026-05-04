@@ -18,6 +18,7 @@ const char* krs_error_get_message(krs_error_t error) {
         case KRS_ERR_FRAME_INVALID_TYPE:         return "Unknown frame type";
         case KRS_ERR_FRAME_BODY_TOO_LARGE:       return "Frame body exceeds maximum size";
         case KRS_ERR_FRAME_ALREADY_FREED:        return "Frame has already been freed";
+        case KRS_ERR_FRAGMENT_PAYLOAD_OVERSIZED: return "fragment payload exceeds per-fragment maximum (malformed frame)";
         case KRS_ERR_NETWORK_INVALID_IP:         return "Invalid IP address format";
         case KRS_ERR_NETWORK_INVALID_PORT:       return "Invalid port number";
         case KRS_ERR_NETWORK_CONNECTION_FAILED:  return "Network connection failed";
