@@ -1,5 +1,6 @@
 #include "kronos_server.h"
 #include "kronos_stats.h"
+#include "kronos_log.h"
 
 #include "server_internal.h"
 #include "message_pool_internal.h"
@@ -35,28 +36,70 @@ ServerPortManager_t* krs_server_port_manager_create(Address_t default_address) {
     return server_port_manager;
 }
 
-void krs_server_port_manager_port_add(ServerPortManager_t* spm, Port_t port) {
-    if (!krs_server_port_manager_validate(spm)) return;
+Void_r krs_server_port_manager_port_add(ServerPortManager_t* spm, Port_t port) {
+    Void_r result = {0};
+
+    if (!krs_server_port_manager_validate(spm)) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "invalid spm");
+        return result;
+    }
 
     krs_wsa_init();
     PortAddress_t port_address = krs_network_port_address_create(port, spm->default_address);
     UDPSocketDescriptor_t* socket_handler = krs_server_udp_socket_handler_create(port_address);
-    if (!socket_handler) return;
+    if (!socket_handler) {
+        KRS_LOG_ERROR("port_manager", "port_add(%u) failed: socket creation failed", port);
+        krs_wsa_cleanup();
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_SERVER_BIND_FAILED, "socket creation failed");
+        return result;
+    }
+
     socket_handler->port = port;
     krs_lib_port_table_insert(spm->port_table, port, socket_handler);
-    krs_array_push(spm->descriptor_list, socket_handler);
+
+    Void_r push_r = krs_array_push(spm->descriptor_list, socket_handler);
+    if (!push_r.base.valid) {
+        KRS_LOG_ERROR("port_manager", "port_add(%u) failed: descriptor list push failed", port);
+        krs_server_udp_socket_handler_destroy(&socket_handler);
+        krs_wsa_cleanup();
+        return push_r;
+    }
+
+    result.base = krs_lib_error_result_base_suc();
+    return result;
 }
 
-void krs_server_port_manager_port_add_with_address(ServerPortManager_t* spm, Port_t port, Address_t address) {
-    if (!krs_server_port_manager_validate(spm)) return;
+Void_r krs_server_port_manager_port_add_with_address(ServerPortManager_t* spm, Port_t port, Address_t address) {
+    Void_r result = {0};
+
+    if (!krs_server_port_manager_validate(spm)) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "invalid spm");
+        return result;
+    }
 
     krs_wsa_init();
     PortAddress_t port_address = krs_network_port_address_create(port, address);
     UDPSocketDescriptor_t* socket_handler = krs_server_udp_socket_handler_create(port_address);
-    if (!socket_handler) return;
+    if (!socket_handler) {
+        KRS_LOG_ERROR("port_manager", "port_add_with_address(%u) failed: socket creation failed", port);
+        krs_wsa_cleanup();
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_SERVER_BIND_FAILED, "socket creation failed");
+        return result;
+    }
+
     socket_handler->port = port;
     krs_lib_port_table_insert(spm->port_table, port, socket_handler);
-    krs_array_push(spm->descriptor_list, socket_handler);
+
+    Void_r push_r = krs_array_push(spm->descriptor_list, socket_handler);
+    if (!push_r.base.valid) {
+        KRS_LOG_ERROR("port_manager", "port_add_with_address(%u) failed: descriptor list push failed", port);
+        krs_server_udp_socket_handler_destroy(&socket_handler);
+        krs_wsa_cleanup();
+        return push_r;
+    }
+
+    result.base = krs_lib_error_result_base_suc();
+    return result;
 }
 
 void krs_server_port_manager_destroy(ServerPortManager_t** spm) {
