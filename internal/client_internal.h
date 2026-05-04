@@ -25,10 +25,12 @@ struct ServerConnection {
     volatile bool            running;
     ChannelMessageCallback_f callback;
     void*                    callback_user_data;
-    Reassembler_t*           reassembler;
-    AckTracker_t*            ack_tracker;
-    CongestionController_t*  congestion;
-    uint64_t                 last_heartbeat_sent_ms;
+    Reassembler_t*            reassembler;
+    AckTracker_t*             ack_tracker;
+    CongestionController_t*   congestion;
+    uint64_t                  last_heartbeat_sent_ms;
+    DeliveryFailureCallback_f delivery_failure_callback;
+    void*                     delivery_failure_callback_user_data;
 };
 
 #endif // CLIENT_INTERNAL_H
