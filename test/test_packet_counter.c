@@ -3,6 +3,7 @@
 
 #include <unity.h>
 #include <stdint.h>
+#include <windows.h>
 
 
 void test_packet_counter_create_destroy(void) {
@@ -109,4 +110,49 @@ void test_packet_counter_boundary_channels(void) {
     TEST_ASSERT_EQUAL_UINT64(1, krs_packet_counter_current(counter, 255));
 
     krs_packet_counter_destroy(&counter);
+}
+
+typedef struct CounterStressArgs {
+    PacketCounter_t* counter;
+    Channel_t channel;
+    uint32_t increments;
+} CounterStressArgs_t;
+
+static DWORD WINAPI s_counter_stress_thread(LPVOID param) {
+    CounterStressArgs_t* args = (CounterStressArgs_t*)param;
+    for (uint32_t i = 0; i < args->increments; i++) {
+        (void)krs_packet_counter_next(args->counter, args->channel);
+    }
+    return 0;
+}
+
+void test_packet_counter_concurrent_next_no_lost_increments(void) {
+    PacketCounter_t* counter = krs_packet_counter_create();
+    TEST_ASSERT_NOT_NULL(counter);
+
+    enum { THREAD_COUNT = 8, INCREMENTS_PER_THREAD = 100000 };
+    HANDLE threads[THREAD_COUNT];
+    CounterStressArgs_t args = {
+        .counter = counter,
+        .channel = 10,
+        .increments = INCREMENTS_PER_THREAD
+    };
+
+    for (int i = 0; i < THREAD_COUNT; i++) {
+        threads[i] = CreateThread(NULL, 0, s_counter_stress_thread, &args, 0, NULL);
+        TEST_ASSERT_NOT_NULL(threads[i]);
+    }
+    WaitForMultipleObjects(THREAD_COUNT, threads, TRUE, INFINITE);
+    for (int i = 0; i < THREAD_COUNT; i++) CloseHandle(threads[i]);
+
+    uint64_t expected = (uint64_t)THREAD_COUNT * INCREMENTS_PER_THREAD;
+    TEST_ASSERT_EQUAL_UINT64(expected, krs_packet_counter_current(counter, 10));
+
+    for (int ch = 0; ch <= MAX_CHANNEL_NUMBER; ch++) {
+        if (ch == 10) continue;
+        TEST_ASSERT_EQUAL_UINT64(0u, krs_packet_counter_current(counter, (Channel_t)ch));
+    }
+
+    krs_packet_counter_destroy(&counter);
+    TEST_ASSERT_NULL(counter);
 }
