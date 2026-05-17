@@ -47,8 +47,12 @@ void krs_ack_tracker_expect(AckTracker_t* tracker, uint64_t packet_id, uint8_t c
  *
  * @param tracker          The tracker to update.
  * @param acked_packet_id  ID of the packet that was acknowledged.
+ * @param channel          Channel the ACK was received on. Used to scope fast-retransmit
+ *                         observation: only pending entries on the same channel have
+ *                         their `acked_after_count` incremented. Must match the channel
+ *                         of the corresponding original send.
  */
-void krs_ack_tracker_receive(AckTracker_t* tracker, uint64_t acked_packet_id);
+void krs_ack_tracker_receive(AckTracker_t* tracker, uint64_t acked_packet_id, uint8_t channel);
 
 /**
  * @brief Records that a packet was acknowledged and returns the RTT sample.
@@ -59,13 +63,18 @@ void krs_ack_tracker_receive(AckTracker_t* tracker, uint64_t acked_packet_id);
  *
  * @param tracker          The tracker to update.
  * @param acked_packet_id  ID of the packet that was acknowledged.
+ * @param channel          Channel the ACK was received on. Used to scope fast-retransmit
+ *                         observation: only pending entries on the same channel have
+ *                         their `acked_after_count` incremented. Must match the channel
+ *                         of the corresponding original send.
  * @return RTT in milliseconds, or -1.0 if not found.
  */
-double krs_ack_tracker_receive_rtt(AckTracker_t* tracker, uint64_t acked_packet_id);
+double krs_ack_tracker_receive_rtt(AckTracker_t* tracker, uint64_t acked_packet_id, uint8_t channel);
 
 /**
  * @brief Checks for timed-out packets, returns retransmission candidates,
- *        and reports permanently-dropped packets, with per-entry channel attribution.
+ *        and reports permanently-dropped packets, with per-entry channel
+ *        and detection-mode attribution.
  *
  * Packets that have exceeded max_retries are dropped; their packet IDs are written
  * to dropped_ids_out (if non-NULL) up to dropped_capacity entries, and their
@@ -73,6 +82,15 @@ double krs_ack_tracker_receive_rtt(AckTracker_t* tracker, uint64_t acked_packet_
  * For each remaining timed-out packet, its ID is written to retry_ids_out
  * (up to out_capacity entries), its channel to retry_channels_out (if non-NULL),
  * its retry count is incremented, and its timeout timer is reset.
+ *
+ * The detection mode for each retry is reported in retry_was_fast_out (if
+ * non-NULL): true means the retry was triggered by fast-retransmit
+ * (KRS_FAST_RETRANSMIT_THRESHOLD later packets ACKed); false means it was
+ * triggered by the elapsed-time / RTO timer. When both conditions fire
+ * simultaneously the entry is reported as fast (the FR signal carries strictly
+ * more information about network state — at least three later packets did
+ * make it through). Callers route fast vs. timeout retries to the matching
+ * krs_congestion_on_*_loss entry point.
  *
  * Pass NULL for either channel buffer to skip channel reporting on that side.
  *
@@ -85,8 +103,11 @@ double krs_ack_tracker_receive_rtt(AckTracker_t* tracker, uint64_t acked_packet_
  *                              expect, receive, or destroy). Use
  *                              krs_ack_tracker_get_retry_frame_for_entry() to access
  *                              frame data without re-scanning the pending list.
+ * @param retry_was_fast_out    Optional output buffer; entry r is true if retry r was
+ *                              triggered by fast-retransmit detection, false if by
+ *                              elapsed-timeout. Same indexing as retry_ids_out.
  * @param out_capacity          Capacity of retry_ids_out (and retry_channels_out /
- *                              retry_entries_out if non-NULL).
+ *                              retry_entries_out / retry_was_fast_out if non-NULL).
  * @param dropped_ids_out       Optional output buffer for permanently-dropped packet IDs.
  * @param dropped_channels_out  Optional output buffer for channels of those drops.
  * @param dropped_capacity      Capacity of dropped_ids_out / dropped_channels_out.
@@ -100,6 +121,7 @@ uint32_t krs_ack_tracker_check_timeouts(AckTracker_t* tracker,
                                         uint64_t* retry_ids_out,
                                         uint8_t* retry_channels_out,
                                         AckEntry_t** retry_entries_out,
+                                        bool* retry_was_fast_out,
                                         uint32_t out_capacity,
                                         uint64_t* dropped_ids_out,
                                         uint8_t* dropped_channels_out,
@@ -143,13 +165,16 @@ const uint8_t* krs_ack_tracker_get_retry_frame_for_entry(const AckEntry_t* entry
                                                           uint16_t* frame_size_out);
 
 /**
- * @brief Updates the timeout used for detecting timed-out packets.
+ * @brief Updates the base timeout used for detecting timed-out packets.
  *
- * Allows the congestion controller to feed its computed RTO back
- * to the tracker for adaptive retransmission timing.
+ * Allows the congestion controller to feed its computed RTO back to the
+ * tracker for adaptive retransmission timing. The effective per-retry
+ * timeout is `timeout_ms << min(retry_count, 6)`, clamped to 60s — TCP-style
+ * exponential backoff. The first retry waits `timeout_ms`; the second waits
+ * `2 * timeout_ms`; etc. Fast-retransmit detection is unaffected by backoff.
  *
  * @param tracker     The ACK tracker.
- * @param timeout_ms  New timeout in milliseconds. Clamped to minimum 50ms.
+ * @param timeout_ms  Base timeout in milliseconds. Clamped to minimum 50ms.
  */
 void krs_ack_tracker_set_timeout(AckTracker_t* tracker, uint32_t timeout_ms);
 
