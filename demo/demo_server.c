@@ -25,10 +25,9 @@ static void s_on_disconnect(uint32_t connection_id, Channel_t channel, void* use
     printf("[SERVER] Client disconnected: id=%u channel=%u\n", connection_id, channel);
 }
 
-static void s_on_message(Channel_t channel, ChannelType_e channel_type,
-                         uint32_t connection_id, const uint8_t* data,
-                         uint16_t data_length, void* user_data) {
-    (void)channel_type;
+static void s_on_message(Channel_t channel, uint32_t connection_id,
+                         const uint8_t* data, uint16_t data_length,
+                         void* user_data) {
     (void)user_data;
 
     printf("[SERVER] Message from client %u on ch %u (%u bytes): ",

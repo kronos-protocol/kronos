@@ -17,10 +17,9 @@ static void s_log_callback(KronosLogLevel_e level, const char* component, const 
 
 static volatile int s_received_count = 0;
 
-static void s_on_server_message(Channel_t channel, ChannelType_e channel_type,
-                                uint32_t connection_id, const uint8_t* data,
-                                uint16_t data_length, void* user_data) {
-    (void)channel_type;
+static void s_on_server_message(Channel_t channel, uint32_t connection_id,
+                                const uint8_t* data, uint16_t data_length,
+                                void* user_data) {
     (void)connection_id;
     (void)user_data;
 
@@ -55,6 +54,14 @@ int main(void) {
     }
 
     printf("Connected! Connection ID: %u\n\n", conn->connection_id);
+
+    Void_r sub_r = krs_client_subscribe(conn, DEMO_CHANNEL, 2000);
+    if (!sub_r.base.valid) {
+        printf("Subscribe failed: %s\n",
+               sub_r.base.error_message ? sub_r.base.error_message : "unknown");
+        krs_client_disconnect(&conn);
+        return 1;
+    }
 
     krs_client_set_callback(conn, s_on_server_message, NULL);
     Void_r recv_r = krs_client_start_receive(conn);
