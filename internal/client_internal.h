@@ -31,6 +31,11 @@ struct ServerConnection {
     uint64_t                  last_heartbeat_sent_ms;
     DeliveryFailureCallback_f delivery_failure_callback;
     void*                     delivery_failure_callback_user_data;
+
+    volatile uint64_t         pending_subscribe_pid;
+    volatile bool             subscribe_ack_received;
+
+    bool                      subscribed[MAX_CHANNEL_NUMBER + 1];
 };
 
 #endif // CLIENT_INTERNAL_H
