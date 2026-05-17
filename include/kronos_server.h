@@ -62,8 +62,6 @@ typedef void (*DeliveryFailureCallback_f)(uint32_t connection_id,
  *          client receive thread.
  *
  * @param channel        Channel on which the message arrived.
- * @param channel_type   Channel-type label (see ChannelType_e). Currently
- *                       carries no protocol semantics — passed through verbatim.
  * @param connection_id  Identifier of the sending connection (0 if unknown).
  * @param data           Pointer to the message payload bytes. Valid only
  *                       for the duration of this callback.
@@ -71,7 +69,6 @@ typedef void (*DeliveryFailureCallback_f)(uint32_t connection_id,
  * @param user_data      User-supplied context pointer registered with the callback.
  */
 typedef void (*ChannelMessageCallback_f)(Channel_t channel,
-                                         ChannelType_e channel_type,
                                          uint32_t connection_id,
                                          const uint8_t* data,
                                          uint16_t data_length,
@@ -232,6 +229,30 @@ void krs_server_broadcast_except(ServerPortManager_t* spm, Channel_t channel,
                                  const uint8_t* data, uint16_t length);
 
 /**
+ * @brief Reliably broadcasts data to all connections subscribed on the given channel.
+ *
+ * For each subscribed connection, this is equivalent to calling
+ * `krs_server_send(spm, conn_id, channel, data, length, true)`. Per-recipient
+ * retransmit, congestion-window backoff, and `delivery_failure_callback`
+ * invocation are inherited from the reliable-send pipeline. Per-recipient
+ * failures do not abort the broadcast — each connection is handled
+ * independently.
+ *
+ * @param spm     The server port manager.
+ * @param channel Target channel (must be >= 10 for application channels).
+ * @param data    Payload bytes to broadcast.
+ * @param length  Number of payload bytes.
+ * @return Void_r indicating overall success. Per-recipient delivery is
+ *         observable via the `DeliveryFailureCallback_f`.
+ *
+ * @retval KRS_SUCCESS                 Broadcast iteration completed.
+ * @retval KRS_ERR_NULL_POINTER        spm or data is NULL.
+ * @retval KRS_ERR_NOT_INITIALIZED     Server not started (no descriptor list).
+ */
+Void_r krs_server_broadcast_reliable(ServerPortManager_t* spm, Channel_t channel,
+                                     const uint8_t* data, uint16_t length);
+
+/**
  * @brief Starts the IOCP I/O and message handler threads for the server.
  *
  * Calls WSAStartup, creates the IOCP handle, associates all registered sockets,
@@ -272,7 +293,12 @@ Void_r krs_server_set_connect_callback(ServerPortManager_t* spm, Port_t port,
                                        ConnectionLifecycleCallback_f callback, void* user_data);
 
 /**
- * @brief Registers a callback invoked when a client is disconnected (heartbeat timeout).
+ * @brief Registers a callback invoked when a client is disconnected.
+ *
+ * @details Fires for: client-initiated DISCONNECT frame, heartbeat timeout
+ *          eviction, and server shutdown via krs_server_stop. Channel argument
+ *          is always 0. Each connect_callback is paired with exactly one
+ *          disconnect_callback over the connection's lifetime.
  *
  * @param spm        The server port manager.
  * @param port       The port whose descriptor receives the callback.
