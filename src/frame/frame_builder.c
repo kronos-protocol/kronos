@@ -1,5 +1,6 @@
 #include "kronos.h"
 #include "frame_builder_internal.h"
+#include "frame_body.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -29,10 +30,36 @@ void krs_frame_builder_set_data(FrameBuilder_c* builder, const uint8_t* data, ui
     builder->data_length = length;
 }
 
+void krs_frame_builder_set_fragment_info(FrameBuilder_c* builder, uint16_t index, uint16_t total) {
+    if (!builder) return;
+    builder->metadata.fragment_index = index;
+    builder->metadata.fragment_total = total;
+    builder->presence_flags |= (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
+}
+
+void krs_frame_builder_set_ack_id(FrameBuilder_c* builder, uint64_t ack_id) {
+    if (!builder) return;
+    builder->metadata.ack_id = ack_id;
+    builder->presence_flags |= (uint16_t)(1u << META_FLAG_ACK_ID);
+}
+
+void krs_frame_builder_set_priority(FrameBuilder_c* builder, uint8_t priority) {
+    if (!builder) return;
+    builder->metadata.priority = priority;
+    builder->presence_flags |= (uint16_t)(1u << META_FLAG_PRIORITY);
+}
+
+void krs_frame_builder_set_timestamp(FrameBuilder_c* builder, uint64_t timestamp_ms) {
+    if (!builder) return;
+    builder->metadata.timestamp_ms = timestamp_ms;
+    builder->presence_flags |= (uint16_t)(1u << META_FLAG_TIMESTAMP);
+}
+
 uint16_t krs_frame_builder_serialize(FrameBuilder_c* builder, uint8_t* out, uint16_t out_size) {
     if (!builder || !out) return 0;
 
-    uint16_t total = KRONOS_FRAME_HEADER_LENGTH + builder->data_length;
+    uint16_t metadata_size = krs_frame_metadata_block_length(builder->presence_flags);
+    uint16_t total = (uint16_t)(KRONOS_FRAME_HEADER_LENGTH + metadata_size + builder->data_length);
     if (out_size < total) return 0;
 
     out[0] = 0x4B;
@@ -50,8 +77,33 @@ uint16_t krs_frame_builder_serialize(FrameBuilder_c* builder, uint8_t* out, uint
     out[12] = (uint8_t)(builder->packet_id >> 8);
     out[13] = (uint8_t)(builder->packet_id & 0xFF);
 
+    uint16_t cursor = KRONOS_FRAME_HEADER_LENGTH;
+
+    if (builder->presence_flags & (uint16_t)(1u << META_FLAG_FRAGMENT_INFO)) {
+        out[cursor]     = (uint8_t)(builder->metadata.fragment_index >> 8);
+        out[cursor + 1] = (uint8_t)(builder->metadata.fragment_index & 0xFF);
+        out[cursor + 2] = (uint8_t)(builder->metadata.fragment_total >> 8);
+        out[cursor + 3] = (uint8_t)(builder->metadata.fragment_total & 0xFF);
+        cursor += 4;
+    }
+    if (builder->presence_flags & (uint16_t)(1u << META_FLAG_ACK_ID)) {
+        for (int k = 0; k < 8; k++) {
+            out[cursor + k] = (uint8_t)((builder->metadata.ack_id >> ((7 - k) * 8)) & 0xFF);
+        }
+        cursor += 8;
+    }
+    if (builder->presence_flags & (uint16_t)(1u << META_FLAG_PRIORITY)) {
+        out[cursor++] = builder->metadata.priority;
+    }
+    if (builder->presence_flags & (uint16_t)(1u << META_FLAG_TIMESTAMP)) {
+        for (int k = 0; k < 8; k++) {
+            out[cursor + k] = (uint8_t)((builder->metadata.timestamp_ms >> ((7 - k) * 8)) & 0xFF);
+        }
+        cursor += 8;
+    }
+
     if (builder->data && builder->data_length > 0) {
-        memcpy(out + KRONOS_FRAME_HEADER_LENGTH, builder->data, builder->data_length);
+        memcpy(out + cursor, builder->data, builder->data_length);
     }
 
     return total;
