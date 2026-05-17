@@ -142,6 +142,9 @@ ServerConnection_t* krs_client_server_connect(PortAddress_t server_address) {
     conn->last_heartbeat_sent_ms = GetTickCount64();
     conn->delivery_failure_callback = NULL;
     conn->delivery_failure_callback_user_data = NULL;
+    conn->pending_subscribe_pid = 0;
+    conn->subscribe_ack_received = false;
+    memset(conn->subscribed, 0, sizeof(conn->subscribed));
     return conn;
 }
 
@@ -252,13 +255,21 @@ Void_r krs_client_send(ServerConnection_t* conn, Channel_t channel,
 Void_r krs_client_send_blocking(ServerConnection_t* conn, Channel_t channel,
                                 const uint8_t* data, uint16_t length, uint32_t timeout_ms) {
     uint64_t deadline = GetTickCount64() + timeout_ms;
+    uint32_t backoff_ms = 1;
 
     for (;;) {
         Void_r result = krs_client_send(conn, channel, data, length, true);
         if (result.base.valid) return result;
         if (result.base.error_code != KRS_ERR_SERVER_CONGESTION_WINDOW_FULL) return result;
-        if (GetTickCount64() >= deadline) return result;
-        Sleep(1);
+
+        uint64_t now = GetTickCount64();
+        if (now >= deadline) return result;
+
+        uint64_t remaining = deadline - now;
+        DWORD sleep_ms = (DWORD)(backoff_ms < remaining ? backoff_ms : remaining);
+        Sleep(sleep_ms);
+
+        if (backoff_ms < 50) backoff_ms *= 2;
     }
 }
 
@@ -308,17 +319,29 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
         if (conn->ack_tracker) {
             uint64_t retry_ids[16];
             uint8_t  retry_channels[16];
+            bool     retry_was_fast[16];
             uint64_t dropped_ids[16];
             uint8_t  dropped_channels[16];
             uint32_t dropped_count = 0;
             uint32_t retry_count = krs_ack_tracker_check_timeouts(conn->ack_tracker,
-                                                                    retry_ids, retry_channels, NULL, 16,
+                                                                    retry_ids, retry_channels, NULL,
+                                                                    retry_was_fast, 16,
                                                                     dropped_ids, dropped_channels, 16,
                                                                     &dropped_count);
             uint32_t to_resend = retry_count < 16 ? retry_count : 16;
 
-            if (to_resend > 0 && conn->congestion) {
-                krs_congestion_on_loss(conn->congestion);
+            bool any_timeout_retry = false;
+            bool any_fast_retry = false;
+            for (uint32_t r = 0; r < to_resend; r++) {
+                if (retry_was_fast[r]) any_fast_retry = true;
+                else                   any_timeout_retry = true;
+            }
+            if (conn->congestion && (any_fast_retry || any_timeout_retry)) {
+                if (any_timeout_retry) {
+                    krs_congestion_on_timeout_loss(conn->congestion);
+                } else {
+                    krs_congestion_on_fast_retransmit_loss(conn->congestion);
+                }
             }
 
             uint8_t retry_bufs[16][KRONOS_BUFFER_SIZE];
@@ -371,7 +394,7 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
             EnterCriticalSection(&conn->state_lock);
             double rtt_ms = -1.0;
             if (conn->ack_tracker) {
-                rtt_ms = krs_ack_tracker_receive_rtt(conn->ack_tracker, frame.packet_id);
+                rtt_ms = krs_ack_tracker_receive_rtt(conn->ack_tracker, frame.packet_id, frame.channel);
             }
             if (rtt_ms >= 0.0 && conn->congestion) {
                 krs_congestion_on_ack(conn->congestion, rtt_ms);
@@ -379,10 +402,21 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
                     krs_ack_tracker_set_timeout(conn->ack_tracker, (uint32_t)krs_congestion_get_rto(conn->congestion));
                 }
             }
+            if (conn->pending_subscribe_pid != 0 &&
+                frame.packet_id == conn->pending_subscribe_pid) {
+                conn->subscribe_ack_received = true;
+            }
             LeaveCriticalSection(&conn->state_lock);
             continue;
         }
         if (frame.channel < 10) continue;
+
+        EnterCriticalSection(&conn->state_lock);
+        bool is_subscribed = conn->subscribed[frame.channel];
+        LeaveCriticalSection(&conn->state_lock);
+        if (!is_subscribed) {
+            continue;
+        }
 
         bool has_fragment_info = (frame.presence_flags & (uint16_t)(1u << META_FLAG_FRAGMENT_INFO)) != 0;
 
@@ -393,7 +427,7 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
                                   frame.channel, frame.packet_id);
             }
             if (conn->callback) {
-                conn->callback(frame.channel, OPEN_CHANNEL, conn->connection_id,
+                conn->callback(frame.channel, conn->connection_id,
                                frame.body, frame.body_length,
                                conn->callback_user_data);
             }
@@ -412,7 +446,7 @@ static DWORD WINAPI s_client_recv_thread(LPVOID param) {
             }
 
             if (conn->callback) {
-                conn->callback(frame.channel, OPEN_CHANNEL, conn->connection_id,
+                conn->callback(frame.channel, conn->connection_id,
                                reassembly.data, (uint16_t)reassembly.data_length,
                                conn->callback_user_data);
             }
@@ -449,6 +483,176 @@ Void_r krs_client_start_receive(ServerConnection_t* conn) {
 
     result.base = krs_lib_error_result_base_suc();
     return result;
+}
+
+Void_r krs_client_unsubscribe(ServerConnection_t* conn, Channel_t channel) {
+    Void_r result = {0};
+    if (!conn) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "conn is NULL");
+        return result;
+    }
+    if (!conn->connected) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_CLIENT_NOT_CONNECTED, "not connected");
+        return result;
+    }
+
+    FrameBuilder_c* builder = krs_frame_builder_create(0, UNSUBSCRIBE);
+    if (!builder) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_MEMORY_ALLOCATION, "builder alloc failed");
+        return result;
+    }
+
+    uint8_t body[1];
+    body[0] = (uint8_t)channel;
+    krs_frame_builder_set_data(builder, body, 1);
+
+    EnterCriticalSection(&conn->state_lock);
+    uint64_t pid = conn->packet_counter ? krs_packet_counter_next(conn->packet_counter, 0) : 0;
+    LeaveCriticalSection(&conn->state_lock);
+    krs_frame_builder_set_packet_id(builder, pid);
+
+    uint8_t buf[64];
+    uint16_t n = krs_frame_builder_serialize(builder, buf, sizeof(buf));
+    krs_frame_builder_destroy(&builder);
+
+    if (n == 0) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_BUFFER_TOO_SMALL, "serialize failed");
+        return result;
+    }
+
+    EnterCriticalSection(&conn->state_lock);
+    conn->subscribed[channel] = false;
+    LeaveCriticalSection(&conn->state_lock);
+
+    krs_net_send_frame(conn->socket, &conn->server_address, buf, n);
+    result.base = krs_lib_error_result_base_suc();
+    return result;
+}
+
+Void_r krs_client_subscribe(ServerConnection_t* conn, Channel_t channel, uint32_t timeout_ms) {
+    Void_r result = {0};
+    if (!conn) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "conn is NULL");
+        return result;
+    }
+    if (!conn->connected) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_CLIENT_NOT_CONNECTED, "not connected");
+        return result;
+    }
+    if (channel < 10) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_INVALID_PARAMETER, "channel must be >= 10");
+        return result;
+    }
+
+    FrameBuilder_c* builder = krs_frame_builder_create(0, SUBSCRIBE);
+    if (!builder) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_MEMORY_ALLOCATION, "builder alloc failed");
+        return result;
+    }
+
+    uint8_t body[1];
+    body[0] = (uint8_t)channel;
+    krs_frame_builder_set_data(builder, body, 1);
+    krs_frame_builder_set_flag(builder, META_FLAG_ACK_REQUIRED);
+
+    EnterCriticalSection(&conn->state_lock);
+    uint64_t pid = conn->packet_counter ? krs_packet_counter_next(conn->packet_counter, 0) : 0;
+    LeaveCriticalSection(&conn->state_lock);
+    krs_frame_builder_set_packet_id(builder, pid);
+
+    uint8_t buf[64];
+    uint16_t n = krs_frame_builder_serialize(builder, buf, sizeof(buf));
+    krs_frame_builder_destroy(&builder);
+
+    if (n == 0) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_BUFFER_TOO_SMALL, "serialize failed");
+        return result;
+    }
+
+    bool recv_thread_running = (conn->recv_thread != NULL);
+
+    if (recv_thread_running) {
+        EnterCriticalSection(&conn->state_lock);
+        if (!conn->ack_tracker) {
+            conn->ack_tracker = krs_ack_tracker_create(1000, 5);
+        }
+        if (conn->ack_tracker) {
+            krs_ack_tracker_expect(conn->ack_tracker, pid, 0, buf, n);
+        }
+        LeaveCriticalSection(&conn->state_lock);
+    }
+
+    if (recv_thread_running) {
+        EnterCriticalSection(&conn->state_lock);
+        conn->pending_subscribe_pid = pid;
+        conn->subscribe_ack_received = false;
+        LeaveCriticalSection(&conn->state_lock);
+
+        krs_net_send_frame(conn->socket, &conn->server_address, buf, n);
+
+        uint64_t deadline = GetTickCount64() + timeout_ms;
+        while (GetTickCount64() < deadline) {
+            EnterCriticalSection(&conn->state_lock);
+            bool acked = conn->subscribe_ack_received;
+            LeaveCriticalSection(&conn->state_lock);
+            if (acked) {
+                EnterCriticalSection(&conn->state_lock);
+                conn->pending_subscribe_pid = 0;
+                conn->subscribe_ack_received = false;
+                conn->subscribed[channel] = true;
+                LeaveCriticalSection(&conn->state_lock);
+                result.base = krs_lib_error_result_base_suc();
+                return result;
+            }
+            Sleep(5);
+        }
+
+        EnterCriticalSection(&conn->state_lock);
+        conn->pending_subscribe_pid = 0;
+        conn->subscribe_ack_received = false;
+        LeaveCriticalSection(&conn->state_lock);
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_CLIENT_TIMEOUT, "subscribe ACK timeout");
+        return result;
+    }
+
+    DWORD old_timeout_ms = 0;
+    int old_timeout_len = sizeof(old_timeout_ms);
+    getsockopt(conn->socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&old_timeout_ms, &old_timeout_len);
+    DWORD subscribe_timeout = timeout_ms;
+    setsockopt(conn->socket, SOL_SOCKET, SO_RCVTIMEO,
+               (const char*)&subscribe_timeout, sizeof(subscribe_timeout));
+
+    krs_net_send_frame(conn->socket, &conn->server_address, buf, n);
+
+    uint64_t deadline = GetTickCount64() + timeout_ms;
+    for (;;) {
+        if (GetTickCount64() >= deadline) {
+            setsockopt(conn->socket, SOL_SOCKET, SO_RCVTIMEO,
+                       (const char*)&old_timeout_ms, sizeof(old_timeout_ms));
+            result.base = krs_lib_error_result_base_w_msg(KRS_ERR_CLIENT_TIMEOUT, "subscribe ACK timeout");
+            return result;
+        }
+
+        uint8_t recv_buf[128];
+        struct sockaddr_in6 from;
+        int from_len = sizeof(from);
+        int recv_n = recvfrom(conn->socket, (char*)recv_buf, sizeof(recv_buf), 0,
+                              (struct sockaddr*)&from, &from_len);
+        if (recv_n <= 0) continue;
+
+        uint8_t body_buf[64];
+        Frame_t reply = krs_frame_create(recv_buf, (uint16_t)recv_n, body_buf, sizeof(body_buf));
+        if (reply.protocol_char != 0x4B) continue;
+        if (reply.frame_type == MESSAGE_ACK && reply.packet_id == pid) {
+            setsockopt(conn->socket, SOL_SOCKET, SO_RCVTIMEO,
+                       (const char*)&old_timeout_ms, sizeof(old_timeout_ms));
+            EnterCriticalSection(&conn->state_lock);
+            conn->subscribed[channel] = true;
+            LeaveCriticalSection(&conn->state_lock);
+            result.base = krs_lib_error_result_base_suc();
+            return result;
+        }
+    }
 }
 
 void krs_client_disconnect(ServerConnection_t** conn) {
@@ -491,4 +695,10 @@ void krs_client_set_delivery_failure_callback(ServerConnection_t* conn,
     conn->delivery_failure_callback = callback;
     conn->delivery_failure_callback_user_data = user_data;
     LeaveCriticalSection(&conn->state_lock);
+}
+
+bool krs_client_is_subscribed(const ServerConnection_t* conn, Channel_t channel) {
+    if (!conn) return false;
+    if (channel < 10) return false;
+    return conn->subscribed[channel];
 }
