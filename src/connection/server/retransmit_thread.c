@@ -68,15 +68,19 @@ static uint32_t s_collect_retransmits(ServerPortManager_t* spm,
         uint64_t retry_ids[32];
         uint8_t  retry_channels[32];
         AckEntry_t* retry_entries[32];
+        bool     retry_was_fast[32];
         uint64_t dropped_ids[32];
         uint8_t  dropped_channels[32];
         uint32_t dropped_count = 0;
         uint32_t retry_count = krs_ack_tracker_check_timeouts(tracker,
-                                                              retry_ids, retry_channels, retry_entries, 32,
+                                                              retry_ids, retry_channels, retry_entries,
+                                                              retry_was_fast, 32,
                                                               dropped_ids, dropped_channels, 32,
                                                               &dropped_count);
         uint32_t to_check = retry_count < 32 ? retry_count : 32;
 
+        bool any_timeout_retry = false;
+        bool any_fast_retry = false;
         for (uint32_t r = 0; r < to_check && pending_count < pending_capacity; r++) {
             uint16_t frame_size = 0;
             const uint8_t* frame_data = krs_ack_tracker_get_retry_frame_for_entry(
@@ -88,13 +92,20 @@ static uint32_t s_collect_retransmits(ServerPortManager_t* spm,
             pending[pending_count].addr = conn->remote_address;
             pending[pending_count].socket = desc->udp_socket_ref;
             pending_count++;
+
+            if (retry_was_fast[r]) any_fast_retry = true;
+            else                   any_timeout_retry = true;
         }
 
         ReleaseSRWLockExclusive(&conn->ack_lock);
 
-        if (to_check > 0 && conn->congestion) {
+        if (conn->congestion && (any_fast_retry || any_timeout_retry)) {
             AcquireSRWLockExclusive(&conn->cc_lock);
-            krs_congestion_on_loss(conn->congestion);
+            if (any_timeout_retry) {
+                krs_congestion_on_timeout_loss(conn->congestion);
+            } else {
+                krs_congestion_on_fast_retransmit_loss(conn->congestion);
+            }
             ReleaseSRWLockExclusive(&conn->cc_lock);
         }
 
@@ -126,10 +137,9 @@ static void s_flush_retransmits(ServerPortManager_t* spm,
 }
 
 static uint32_t s_evict_stale_connections(UDPSocketDescriptor_t* desc,
-                                          EvictedConnection_t* evicted,
                                           ClientConnection_t** orphaned,
-                                          uint32_t evicted_capacity) {
-    uint32_t evicted_count = 0;
+                                          uint32_t orphan_capacity) {
+    uint32_t orphan_count = 0;
     uint64_t now = GetTickCount64();
 
     AcquireSRWLockExclusive(&desc->state_lock);
@@ -143,16 +153,23 @@ static uint32_t s_evict_stale_connections(UDPSocketDescriptor_t* desc,
             i--;
             ClientConnection_t* conn = KRS_ARRAY_GET(conns, i, ClientConnection_t);
             if (!conn) continue;
-            if (now - conn->last_heartbeat_ms < KRS_HEARTBEAT_TIMEOUT_MS) continue;
 
-            if (evicted_count < evicted_capacity) {
-                evicted[evicted_count].connection_id = conn->connection_id;
-                evicted[evicted_count].channel = (Channel_t)ch;
-                orphaned[evicted_count] = conn;
-                evicted_count++;
+            bool already_tracked = false;
+            for (uint32_t u = 0; u < orphan_count; u++) {
+                if (orphaned[u] == conn) { already_tracked = true; break; }
+            }
+            if (already_tracked) {
+                krs_array_remove(conns, i);
+                continue;
             }
 
-            krs_array_remove(conns, i);
+            bool stale = (now - conn->last_heartbeat_ms >= KRS_HEARTBEAT_TIMEOUT_MS);
+            if (stale) {
+                if (orphan_count < orphan_capacity) {
+                    orphaned[orphan_count++] = conn;
+                }
+                krs_array_remove(conns, i);
+            }
         }
     }
 
@@ -167,34 +184,7 @@ static uint32_t s_evict_stale_connections(UDPSocketDescriptor_t* desc,
 
     ReleaseSRWLockExclusive(&desc->state_lock);
 
-    return evicted_count;
-}
-
-static void s_process_evictions(ServerPortManager_t* spm,
-                                UDPSocketDescriptor_t* desc,
-                                const EvictedConnection_t* evicted,
-                                ClientConnection_t** orphaned,
-                                uint32_t evicted_count) {
-    InterlockedAdd64(&spm->stat_disconnections, evicted_count);
-
-    if (spm->connection_map) {
-        AcquireSRWLockExclusive(&spm->connection_map->lock);
-        for (uint32_t e = 0; e < evicted_count; e++) {
-            krs_connection_map_remove(spm->connection_map, evicted[e].connection_id);
-        }
-        ReleaseSRWLockExclusive(&spm->connection_map->lock);
-    }
-
-    for (uint32_t e = 0; e < evicted_count; e++) {
-        krs_connection_map_release(orphaned[e]);
-    }
-
-    if (desc->disconnect_callback) {
-        for (uint32_t e = 0; e < evicted_count; e++) {
-            desc->disconnect_callback(evicted[e].connection_id, evicted[e].channel,
-                                      desc->disconnect_callback_user_data);
-        }
-    }
+    return orphan_count;
 }
 
 static void s_retransmit_tick(ServerPortManager_t* spm) {
@@ -226,10 +216,9 @@ static void s_retransmit_tick(ServerPortManager_t* spm) {
         UDPSocketDescriptor_t* desc = KRS_ARRAY_GET(spm->descriptor_list, d, UDPSocketDescriptor_t);
         if (!desc) continue;
 
-        EvictedConnection_t evicted[MAX_EVICTIONS_PER_CYCLE];
-        ClientConnection_t* orphaned[MAX_EVICTIONS_PER_CYCLE];
-        uint32_t evicted_count = s_evict_stale_connections(desc, evicted, orphaned, MAX_EVICTIONS_PER_CYCLE);
-        s_process_evictions(spm, desc, evicted, orphaned, evicted_count);
+        ClientConnection_t* orphans[MAX_EVICTIONS_PER_CYCLE];
+        uint32_t orphan_count = s_evict_stale_connections(desc, orphans, MAX_EVICTIONS_PER_CYCLE);
+        krs_server_finalize_orphan_evictions(spm, desc, orphans, orphan_count);
     }
 }
 
