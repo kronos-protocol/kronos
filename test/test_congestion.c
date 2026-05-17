@@ -153,3 +153,70 @@ void test_cc_create_malloc_failure(void) {
     CongestionController_t* cc = krs_congestion_create();
     TEST_ASSERT_NULL(cc);
 }
+
+void test_cc_timeout_loss_collapses_to_min(void) {
+    CongestionController_t* cc = krs_congestion_create();
+    for (uint32_t i = 0; i < 20; i++) {
+        krs_congestion_on_send(cc);
+        krs_congestion_on_ack(cc, 50.0);
+    }
+    uint32_t before = krs_congestion_get_cwnd(cc);
+    TEST_ASSERT_TRUE(before > KRS_CC_MIN_CWND);
+
+    krs_congestion_on_timeout_loss(cc);
+
+    TEST_ASSERT_EQUAL_UINT32(KRS_CC_MIN_CWND, krs_congestion_get_cwnd(cc));
+    TEST_ASSERT_TRUE(cc->ssthresh >= before / 2 - 1 && cc->ssthresh <= before / 2 + 1);
+    TEST_ASSERT_EQUAL(CC_SLOW_START, cc->phase);
+    krs_congestion_destroy(&cc);
+}
+
+void test_cc_fast_retransmit_loss_keeps_half_window(void) {
+    CongestionController_t* cc = krs_congestion_create();
+    for (uint32_t i = 0; i < 20; i++) {
+        krs_congestion_on_send(cc);
+        krs_congestion_on_ack(cc, 50.0);
+    }
+    uint32_t before = krs_congestion_get_cwnd(cc);
+    TEST_ASSERT_TRUE(before > KRS_CC_MIN_CWND);
+
+    krs_congestion_on_fast_retransmit_loss(cc);
+
+    TEST_ASSERT_TRUE(cc->ssthresh >= before / 2 - 1 && cc->ssthresh <= before / 2 + 1);
+    TEST_ASSERT_TRUE(cc->cwnd >= before / 2 - 1 && cc->cwnd <= before / 2 + 1);
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)cc->ssthresh, krs_congestion_get_cwnd(cc));
+    TEST_ASSERT_EQUAL(CC_CONGESTION_AVOIDANCE, cc->phase);
+    krs_congestion_destroy(&cc);
+}
+
+void test_cc_fast_retransmit_loss_floor_min(void) {
+    CongestionController_t* cc = krs_congestion_create();
+    krs_congestion_on_fast_retransmit_loss(cc);
+    krs_congestion_on_fast_retransmit_loss(cc);
+    krs_congestion_on_fast_retransmit_loss(cc);
+    TEST_ASSERT_TRUE(krs_congestion_get_cwnd(cc) >= KRS_CC_MIN_CWND);
+    TEST_ASSERT_TRUE(cc->ssthresh >= KRS_CC_MIN_CWND);
+    TEST_ASSERT_EQUAL(CC_CONGESTION_AVOIDANCE, cc->phase);
+    krs_congestion_destroy(&cc);
+}
+
+void test_cc_on_loss_wrapper_matches_timeout_loss(void) {
+    CongestionController_t* a = krs_congestion_create();
+    CongestionController_t* b = krs_congestion_create();
+    for (uint32_t i = 0; i < 20; i++) {
+        krs_congestion_on_send(a); krs_congestion_on_ack(a, 50.0);
+        krs_congestion_on_send(b); krs_congestion_on_ack(b, 50.0);
+    }
+    krs_congestion_on_loss(a);
+    krs_congestion_on_timeout_loss(b);
+    TEST_ASSERT_EQUAL_UINT32(krs_congestion_get_cwnd(b), krs_congestion_get_cwnd(a));
+    TEST_ASSERT_EQUAL(b->phase, a->phase);
+    TEST_ASSERT_EQUAL_DOUBLE(b->ssthresh, a->ssthresh);
+    krs_congestion_destroy(&a);
+    krs_congestion_destroy(&b);
+}
+
+void test_cc_loss_variants_handle_null(void) {
+    krs_congestion_on_timeout_loss(NULL);
+    krs_congestion_on_fast_retransmit_loss(NULL);
+}
