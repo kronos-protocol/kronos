@@ -33,16 +33,19 @@ void krs_server_udp_socket_handler_destroy(UDPSocketDescriptor_t** socket_handle
 
     UDPSocketDescriptor_t* desc = *socket_handler;
 
+    KrsArray_t* anchor = desc->channel_states[0].connections;
+    if (anchor) {
+        uint32_t count = krs_array_length(anchor);
+        for (uint32_t i = 0; i < count; i++) {
+            ClientConnection_t* conn = KRS_ARRAY_GET(anchor, i, ClientConnection_t);
+            krs_connection_map_release(conn);
+        }
+    }
     for (uint32_t ch = 0; ch <= MAX_CHANNEL_NUMBER; ch++) {
         ChannelState_t* state = &desc->channel_states[ch];
         krs_packet_counter_destroy(&state->packet_counter);
         krs_reassembler_destroy(&state->reassembler);
         if (state->connections) {
-            uint32_t count = krs_array_length(state->connections);
-            for (uint32_t i = 0; i < count; i++) {
-                ClientConnection_t* conn = KRS_ARRAY_GET(state->connections, i, ClientConnection_t);
-                krs_connection_map_release(conn);
-            }
             krs_array_destroy(&state->connections);
         }
     }
