@@ -43,9 +43,7 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
                                         const PortAddress_t* remote_addr) {
     if (!spm || !descriptor || !frame || !remote_addr) return;
 
-    Channel_t requested_channel = (frame->body && frame->body_length >= 1) ? frame->body[0] : 0;
-
-    ChannelState_t* state = &descriptor->channel_states[requested_channel];
+    ChannelState_t* state = &descriptor->channel_states[0];
     AcquireSRWLockExclusive(&descriptor->state_lock);
     if (!state->connections) {
         state->connections = krs_array_create(8);
@@ -73,8 +71,7 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
     ClientConnection_t* conn = malloc(sizeof(ClientConnection_t));
     if (!conn) {
         ReleaseSRWLockExclusive(&descriptor->state_lock);
-        KRS_LOG_ERROR("server_conn_handler", "ClientConnection allocation failed on channel %u",
-                      requested_channel);
+        KRS_LOG_ERROR("server_conn_handler", "ClientConnection allocation failed");
         return;
     }
 
@@ -89,8 +86,7 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
 
     if (!state->connections || krs_array_push(state->connections, conn).base.error_code != KRS_SUCCESS) {
         ReleaseSRWLockExclusive(&descriptor->state_lock);
-        KRS_LOG_ERROR("server_conn_handler", "failed to register connection on channel %u (push or NULL list)",
-                      requested_channel);
+        KRS_LOG_ERROR("server_conn_handler", "failed to register connection on channel 0");
         free(conn);
         return;
     }
@@ -111,7 +107,7 @@ void krs_server_handle_connection_frame(ServerPortManager_t* spm,
     s_send_frame(descriptor->udp_socket_ref, remote_addr, 0, SOCKET_ACK, ack_body, sizeof(ack_body));
 
     if (descriptor->connect_callback) {
-        descriptor->connect_callback(conn->connection_id, requested_channel,
+        descriptor->connect_callback(conn->connection_id, 0,
                                      descriptor->connect_callback_user_data);
     }
 }
