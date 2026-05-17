@@ -207,3 +207,135 @@ void test_frame_create_s_returns_unsupported_version_error(void) {
     TEST_ASSERT_EQUAL_INT_MESSAGE(KRS_ERR_FRAME_UNSUPPORTED_VERSION, result.base.error_code,
                                   "Error code should be KRS_ERR_FRAME_UNSUPPORTED_VERSION");
 }
+
+void test_frame_builder_set_fragment_info_roundtrip(void) {
+    FrameBuilder_c* b = krs_frame_builder_create(10, BASIC_MESSAGE);
+    krs_frame_builder_set_packet_id(b, 0x1122334455667788ULL);
+    krs_frame_builder_set_fragment_info(b, 3, 7);
+    const uint8_t payload[] = {0xAA, 0xBB};
+    krs_frame_builder_set_data(b, payload, sizeof(payload));
+
+    uint8_t out[64];
+    uint16_t n = krs_frame_builder_serialize(b, out, sizeof(out));
+    TEST_ASSERT_EQUAL_UINT16(KRONOS_FRAME_HEADER_LENGTH + 4 + 2, n);
+
+    uint8_t body_buf[64];
+    Frame_t f = krs_frame_create(out, n, body_buf, sizeof(body_buf));
+    TEST_ASSERT_EQUAL_HEX8(0x4B, f.protocol_char);
+    TEST_ASSERT_EQUAL_UINT8(10, f.channel);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)(1u << META_FLAG_FRAGMENT_INFO), f.presence_flags);
+    TEST_ASSERT_EQUAL_UINT16(3, f.metadata.fragment_index);
+    TEST_ASSERT_EQUAL_UINT16(7, f.metadata.fragment_total);
+    TEST_ASSERT_EQUAL_UINT16(2, f.body_length);
+    TEST_ASSERT_EQUAL_UINT8(0xAA, f.body[0]);
+    TEST_ASSERT_EQUAL_UINT8(0xBB, f.body[1]);
+
+    krs_frame_builder_destroy(&b);
+}
+
+void test_frame_builder_set_ack_id_roundtrip(void) {
+    FrameBuilder_c* b = krs_frame_builder_create(15, MESSAGE_ACK);
+    krs_frame_builder_set_ack_id(b, 0xDEADBEEFCAFEBABEULL);
+
+    uint8_t out[64];
+    uint16_t n = krs_frame_builder_serialize(b, out, sizeof(out));
+    TEST_ASSERT_EQUAL_UINT16(KRONOS_FRAME_HEADER_LENGTH + 8, n);
+
+    uint8_t body_buf[64];
+    Frame_t f = krs_frame_create(out, n, body_buf, sizeof(body_buf));
+    TEST_ASSERT_EQUAL_UINT64(0xDEADBEEFCAFEBABEULL, f.metadata.ack_id);
+    TEST_ASSERT_EQUAL_UINT16(0, f.body_length);
+
+    krs_frame_builder_destroy(&b);
+}
+
+void test_frame_builder_set_priority_roundtrip(void) {
+    FrameBuilder_c* b = krs_frame_builder_create(20, BASIC_MESSAGE);
+    krs_frame_builder_set_priority(b, 7);
+    const uint8_t payload[] = {0x01};
+    krs_frame_builder_set_data(b, payload, 1);
+
+    uint8_t out[64];
+    uint16_t n = krs_frame_builder_serialize(b, out, sizeof(out));
+    TEST_ASSERT_EQUAL_UINT16(KRONOS_FRAME_HEADER_LENGTH + 1 + 1, n);
+
+    uint8_t body_buf[64];
+    Frame_t f = krs_frame_create(out, n, body_buf, sizeof(body_buf));
+    TEST_ASSERT_EQUAL_UINT8(7, f.metadata.priority);
+    TEST_ASSERT_EQUAL_UINT16(1, f.body_length);
+    TEST_ASSERT_EQUAL_UINT8(0x01, f.body[0]);
+
+    krs_frame_builder_destroy(&b);
+}
+
+void test_frame_builder_set_timestamp_roundtrip(void) {
+    FrameBuilder_c* b = krs_frame_builder_create(20, BASIC_MESSAGE);
+    krs_frame_builder_set_timestamp(b, 1234567890ULL);
+
+    uint8_t out[64];
+    uint16_t n = krs_frame_builder_serialize(b, out, sizeof(out));
+    TEST_ASSERT_EQUAL_UINT16(KRONOS_FRAME_HEADER_LENGTH + 8, n);
+
+    uint8_t body_buf[64];
+    Frame_t f = krs_frame_create(out, n, body_buf, sizeof(body_buf));
+    TEST_ASSERT_EQUAL_UINT64(1234567890ULL, f.metadata.timestamp_ms);
+
+    krs_frame_builder_destroy(&b);
+}
+
+void test_frame_builder_combined_metadata_block_in_bit_order(void) {
+    FrameBuilder_c* b = krs_frame_builder_create(10, BASIC_MESSAGE);
+    krs_frame_builder_set_flag(b, META_FLAG_ACK_REQUIRED);
+    krs_frame_builder_set_timestamp(b, 0x1111111111111111ULL);
+    krs_frame_builder_set_fragment_info(b, 1, 2);
+    krs_frame_builder_set_priority(b, 99);
+    krs_frame_builder_set_ack_id(b, 0x2222222222222222ULL);
+    const uint8_t payload[] = {0xFF};
+    krs_frame_builder_set_data(b, payload, 1);
+
+    uint8_t out[64];
+    uint16_t n = krs_frame_builder_serialize(b, out, sizeof(out));
+    uint16_t expected = KRONOS_FRAME_HEADER_LENGTH + 4 + 8 + 1 + 8 + 1;
+    TEST_ASSERT_EQUAL_UINT16(expected, n);
+
+    TEST_ASSERT_EQUAL_UINT16(1, ((uint16_t)out[14] << 8) | out[15]);
+    TEST_ASSERT_EQUAL_UINT16(2, ((uint16_t)out[16] << 8) | out[17]);
+    for (int k = 0; k < 8; k++) TEST_ASSERT_EQUAL_UINT8(0x22, out[18 + k]);
+    TEST_ASSERT_EQUAL_UINT8(99, out[26]);
+    for (int k = 0; k < 8; k++) TEST_ASSERT_EQUAL_UINT8(0x11, out[27 + k]);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, out[35]);
+
+    uint8_t body_buf[64];
+    Frame_t f = krs_frame_create(out, n, body_buf, sizeof(body_buf));
+    uint16_t expected_flags = (uint16_t)((1u << META_FLAG_ACK_REQUIRED) |
+                                          (1u << META_FLAG_FRAGMENT_INFO) |
+                                          (1u << META_FLAG_ACK_ID) |
+                                          (1u << META_FLAG_PRIORITY) |
+                                          (1u << META_FLAG_TIMESTAMP));
+    TEST_ASSERT_EQUAL_UINT16(expected_flags, f.presence_flags);
+    TEST_ASSERT_EQUAL_UINT16(1, f.metadata.fragment_index);
+    TEST_ASSERT_EQUAL_UINT16(2, f.metadata.fragment_total);
+    TEST_ASSERT_EQUAL_UINT64(0x2222222222222222ULL, f.metadata.ack_id);
+    TEST_ASSERT_EQUAL_UINT8(99, f.metadata.priority);
+    TEST_ASSERT_EQUAL_UINT64(0x1111111111111111ULL, f.metadata.timestamp_ms);
+    TEST_ASSERT_EQUAL_UINT16(1, f.body_length);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, f.body[0]);
+
+    krs_frame_builder_destroy(&b);
+}
+
+void test_frame_create_rejects_truncated_metadata_block(void) {
+    uint8_t buf[KRONOS_FRAME_HEADER_LENGTH + 8] = {0};
+    buf[0] = 0x4B;
+    buf[1] = krs_version_encode(KRONOS_VERSION_MAJOR, KRONOS_VERSION_MINOR, KRONOS_VERSION_PATCH);
+    buf[2] = 10;
+    buf[3] = BASIC_MESSAGE;
+    uint16_t flags = (uint16_t)((1u << META_FLAG_FRAGMENT_INFO) | (1u << META_FLAG_ACK_ID));
+    buf[4] = (uint8_t)(flags >> 8);
+    buf[5] = (uint8_t)(flags & 0xFF);
+
+    uint8_t body_buf[64];
+    FrameCreate_r r = krs_frame_create_s(buf, sizeof(buf), body_buf, sizeof(body_buf));
+    TEST_ASSERT_FALSE(r.base.valid);
+    TEST_ASSERT_EQUAL_INT(KRS_ERR_FRAME_INVALID_HEADER, r.base.error_code);
+}
