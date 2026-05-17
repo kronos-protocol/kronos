@@ -33,9 +33,11 @@ struct ConnectionMap {
     ConnectionMapEntry_t* entries;
     uint32_t capacity;
     uint32_t count;
+    uint32_t tombstones;
     AddressMapEntry_t* addr_entries;
     uint32_t addr_capacity;
     uint32_t addr_count;
+    uint32_t addr_tombstones;
     SRWLOCK lock;
 };
 
