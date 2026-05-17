@@ -53,10 +53,41 @@ void krs_congestion_on_send(CongestionController_t* cc);
 void krs_congestion_on_ack(CongestionController_t* cc, double rtt_ms);
 
 /**
- * @brief Records a packet loss event (timeout or max retries exceeded).
+ * @brief Records a timeout-detected loss (NewReno classical-Reno path).
  *
- * Sets ssthresh = cwnd/2, resets cwnd to KRS_CC_MIN_CWND,
- * and transitions to Slow Start phase.
+ * Sets ssthresh = max(cwnd/2, KRS_CC_MIN_CWND), collapses cwnd to
+ * KRS_CC_MIN_CWND, and transitions to Slow Start. Use this when the
+ * loss was detected by the retransmission timer expiring without any
+ * subsequent ACK observation — i.e. genuine "the network went silent".
+ *
+ * @param cc  The congestion controller.
+ */
+void krs_congestion_on_timeout_loss(CongestionController_t* cc);
+
+/**
+ * @brief Records a fast-retransmit-detected loss (NewReno Fast Recovery path).
+ *
+ * Sets ssthresh = max(cwnd/2, KRS_CC_MIN_CWND), sets cwnd = ssthresh,
+ * and transitions to Congestion Avoidance. Use this when the loss was
+ * detected by N >= KRS_FAST_RETRANSMIT_THRESHOLD later packets being
+ * acknowledged — i.e. the network is still flowing and we can keep
+ * roughly half the in-flight count alive so subsequent fast-retransmit
+ * events on this flow can still fire.
+ *
+ * Reference: RFC 6582 (NewReno).
+ *
+ * @param cc  The congestion controller.
+ */
+void krs_congestion_on_fast_retransmit_loss(CongestionController_t* cc);
+
+/**
+ * @brief Records a packet loss event without distinguishing the cause.
+ *
+ * Backward-compatibility wrapper for callers that have not been updated
+ * to the NewReno-aware loss API. Behaves identically to
+ * krs_congestion_on_timeout_loss — i.e. the conservative classical-Reno
+ * collapse to cwnd = 1. New code should call the timeout/fast-retransmit
+ * variants directly.
  *
  * @param cc  The congestion controller.
  */
