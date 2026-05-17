@@ -260,25 +260,21 @@ void test_reassembler_feed_two_fragments_direct(void) {
     uint8_t p0[] = {0xAA, 0xBB};
     uint8_t p1[] = {0xCC, 0xDD, 0xEE};
 
-    uint8_t b0[4 + sizeof(p0)];
-    b0[0] = 0; b0[1] = 0; b0[2] = 0; b0[3] = 2;
-    memcpy(b0 + 4, p0, sizeof(p0));
-
-    uint8_t b1[4 + sizeof(p1)];
-    b1[0] = 0; b1[1] = 1; b1[2] = 0; b1[3] = 2;
-    memcpy(b1 + 4, p1, sizeof(p1));
-
     Frame_t f0 = {0};
     f0.packet_id = 200;
     f0.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
-    f0.body = b0;
-    f0.body_length = sizeof(b0);
+    f0.metadata.fragment_index = 0;
+    f0.metadata.fragment_total = 2;
+    f0.body = p0;
+    f0.body_length = sizeof(p0);
 
     Frame_t f1 = {0};
     f1.packet_id = 200;
     f1.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
-    f1.body = b1;
-    f1.body_length = sizeof(b1);
+    f1.metadata.fragment_index = 1;
+    f1.metadata.fragment_total = 2;
+    f1.body = p1;
+    f1.body_length = sizeof(p1);
 
     Reassembler_t* r = krs_reassembler_create();
 
@@ -303,13 +299,9 @@ void test_reassembler_feed_out_of_order_direct(void) {
     uint8_t p1[] = {3, 4};
     uint8_t p2[] = {5, 6, 7};
 
-    uint8_t b0[4 + sizeof(p0)]; b0[0] = 0; b0[1] = 0; b0[2] = 0; b0[3] = 3; memcpy(b0+4, p0, sizeof(p0));
-    uint8_t b1[4 + sizeof(p1)]; b1[0] = 0; b1[1] = 1; b1[2] = 0; b1[3] = 3; memcpy(b1+4, p1, sizeof(p1));
-    uint8_t b2[4 + sizeof(p2)]; b2[0] = 0; b2[1] = 2; b2[2] = 0; b2[3] = 3; memcpy(b2+4, p2, sizeof(p2));
-
-    Frame_t f0 = {0}; f0.packet_id = 300; f0.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO); f0.body = b0; f0.body_length = sizeof(b0);
-    Frame_t f1 = {0}; f1.packet_id = 300; f1.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO); f1.body = b1; f1.body_length = sizeof(b1);
-    Frame_t f2 = {0}; f2.packet_id = 300; f2.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO); f2.body = b2; f2.body_length = sizeof(b2);
+    Frame_t f0 = {0}; f0.packet_id = 300; f0.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO); f0.metadata.fragment_index = 0; f0.metadata.fragment_total = 3; f0.body = p0; f0.body_length = sizeof(p0);
+    Frame_t f1 = {0}; f1.packet_id = 300; f1.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO); f1.metadata.fragment_index = 1; f1.metadata.fragment_total = 3; f1.body = p1; f1.body_length = sizeof(p1);
+    Frame_t f2 = {0}; f2.packet_id = 300; f2.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO); f2.metadata.fragment_index = 2; f2.metadata.fragment_total = 3; f2.body = p2; f2.body_length = sizeof(p2);
 
     Reassembler_t* r = krs_reassembler_create();
 
@@ -332,15 +324,14 @@ void test_reassembler_feed_out_of_order_direct(void) {
 
 void test_reassembler_feed_duplicate_fragment(void) {
     uint8_t p0[] = {0x01, 0x02, 0x03};
-    uint8_t b0[4 + sizeof(p0)];
-    b0[0] = 0; b0[1] = 0; b0[2] = 0; b0[3] = 2;
-    memcpy(b0 + 4, p0, sizeof(p0));
 
     Frame_t f0 = {0};
     f0.packet_id = 400;
     f0.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
-    f0.body = b0;
-    f0.body_length = sizeof(b0);
+    f0.metadata.fragment_index = 0;
+    f0.metadata.fragment_total = 2;
+    f0.body = p0;
+    f0.body_length = sizeof(p0);
 
     Reassembler_t* r = krs_reassembler_create();
 
@@ -358,14 +349,14 @@ void test_reassembler_feed_duplicate_fragment(void) {
 }
 
 void test_reassembler_feed_oversized_payload_rejected(void) {
-    uint8_t body[4 + KRS_MAX_PAYLOAD_PER_FRAGMENT + 1];
-    body[0] = 0; body[1] = 0;
-    body[2] = 0; body[3] = 2;
-    memset(body + 4, 0xAB, KRS_MAX_PAYLOAD_PER_FRAGMENT + 1);
+    uint8_t body[KRS_MAX_PAYLOAD_PER_FRAGMENT + 1];
+    memset(body, 0xAB, sizeof(body));
 
     Frame_t f = {0};
     f.packet_id = 500;
     f.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
+    f.metadata.fragment_index = 0;
+    f.metadata.fragment_total = 2;
     f.body = body;
     f.body_length = sizeof(body);
 
@@ -383,14 +374,14 @@ void test_reassembler_feed_oversized_payload_rejected(void) {
 }
 
 void test_reassembler_feed_exact_max_payload_accepted(void) {
-    uint8_t body[4 + KRS_MAX_PAYLOAD_PER_FRAGMENT];
-    body[0] = 0; body[1] = 0;
-    body[2] = 0; body[3] = 2;
-    memset(body + 4, 0x7E, KRS_MAX_PAYLOAD_PER_FRAGMENT);
+    uint8_t body[KRS_MAX_PAYLOAD_PER_FRAGMENT];
+    memset(body, 0x7E, sizeof(body));
 
     Frame_t f = {0};
     f.packet_id = 501;
     f.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
+    f.metadata.fragment_index = 0;
+    f.metadata.fragment_total = 2;
     f.body = body;
     f.body_length = sizeof(body);
 
@@ -410,20 +401,16 @@ void test_reassembler_rejects_oversized_total(void) {
     Reassembler_t* r = krs_reassembler_create();
     TEST_ASSERT_NOT_NULL(r);
 
-    uint8_t body[1500];
-    body[0] = 0;
-    body[1] = 0;
-    body[2] = (uint8_t)((KRS_MAX_FRAGMENTS_PER_PACKET + 1) >> 8);
-    body[3] = (uint8_t)((KRS_MAX_FRAGMENTS_PER_PACKET + 1) & 0xFF);
-
     Frame_t frame = {0};
     frame.protocol_char = 0x4B;
     frame.channel = 10;
     frame.frame_type = BASIC_MESSAGE;
     frame.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
     frame.packet_id = 12345;
-    frame.body_length = 4;
-    frame.body = body;
+    frame.metadata.fragment_index = 0;
+    frame.metadata.fragment_total = (uint16_t)(KRS_MAX_FRAGMENTS_PER_PACKET + 1);
+    frame.body_length = 0;
+    frame.body = NULL;
 
     ReassembleResult_t result = krs_reassembler_feed(r, &frame);
     TEST_ASSERT_FALSE(result.base.valid);
@@ -436,19 +423,17 @@ void test_reassembler_rejects_when_session_cap_reached(void) {
     Reassembler_t* r = krs_reassembler_create();
     TEST_ASSERT_NOT_NULL(r);
 
-    uint8_t body[16];
-    body[0] = 0;
-    body[1] = 0;
-    body[2] = 0;
-    body[3] = 8;
-    for (int i = 4; i < 16; i++) body[i] = 0xCC;
+    uint8_t body[12];
+    for (int i = 0; i < 12; i++) body[i] = 0xCC;
 
     Frame_t frame = {0};
     frame.protocol_char = 0x4B;
     frame.channel = 10;
     frame.frame_type = BASIC_MESSAGE;
     frame.presence_flags = (uint16_t)(1u << META_FLAG_FRAGMENT_INFO);
-    frame.body_length = 16;
+    frame.metadata.fragment_index = 0;
+    frame.metadata.fragment_total = 8;
+    frame.body_length = 12;
     frame.body = body;
 
     for (uint32_t i = 0; i < KRS_MAX_REASSEMBLY_SESSIONS; i++) {
