@@ -47,6 +47,51 @@ static void s_post_initial_recv(HANDLE iocp, UDPSocketDescriptor_t* desc) {
     }
 }
 
+static void s_sweep_active_connections_on_stop(ServerPortManager_t* spm) {
+    if (!spm->descriptor_list || !spm->connection_map) return;
+
+    uint32_t desc_count = krs_array_length(spm->descriptor_list);
+    for (uint32_t d = 0; d < desc_count; d++) {
+        UDPSocketDescriptor_t* desc = KRS_ARRAY_GET(spm->descriptor_list, d, UDPSocketDescriptor_t);
+        if (!desc) continue;
+
+        for (;;) {
+            ClientConnection_t* orphans[MAX_EVICTIONS_PER_CYCLE];
+            uint32_t orphan_count = 0;
+
+            AcquireSRWLockExclusive(&desc->state_lock);
+            for (uint32_t ch = 0; ch <= MAX_CHANNEL_NUMBER; ch++) {
+                KrsArray_t* conns = desc->channel_states[ch].connections;
+                if (!conns) continue;
+
+                uint32_t i = krs_array_length(conns);
+                while (i > 0) {
+                    i--;
+                    ClientConnection_t* c = KRS_ARRAY_GET(conns, i, ClientConnection_t);
+                    if (!c) continue;
+
+                    bool already_tracked = false;
+                    for (uint32_t u = 0; u < orphan_count; u++) {
+                        if (orphans[u] == c) { already_tracked = true; break; }
+                    }
+                    if (!already_tracked) {
+                        if (orphan_count >= MAX_EVICTIONS_PER_CYCLE) {
+                            break;
+                        }
+                        orphans[orphan_count++] = c;
+                    }
+                    krs_array_remove(conns, i);
+                }
+            }
+            ReleaseSRWLockExclusive(&desc->state_lock);
+
+            if (orphan_count == 0) break;
+
+            krs_server_finalize_orphan_evictions(spm, desc, orphans, orphan_count);
+        }
+    }
+}
+
 Void_r krs_server_start(ServerPortManager_t* spm) {
     Void_r result = {0};
 
@@ -148,6 +193,11 @@ Void_r krs_server_start(ServerPortManager_t* spm) {
     }
 
     spm->retransmit_thread = CreateThread(NULL, 0, krs_server_retransmit_thread, spm, 0, NULL);
+    if (!spm->retransmit_thread) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_PLATFORM_WINDOWS_SOCKET,
+                                                       "CreateThread failed for retransmit thread");
+        goto fail;
+    }
 
     result.base = krs_lib_error_result_base_suc();
     return result;
@@ -245,6 +295,8 @@ void krs_server_stop(ServerPortManager_t* spm) {
         CloseHandle(spm->retransmit_thread);
         spm->retransmit_thread = NULL;
     }
+
+    s_sweep_active_connections_on_stop(spm);
 
     if (spm->descriptor_list) {
         uint32_t count = krs_array_length(spm->descriptor_list);
