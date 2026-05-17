@@ -7,12 +7,18 @@
 
 static volatile LONG s_wsa_ref_count = 0;
 static CRITICAL_SECTION s_wsa_lock;
-static volatile LONG s_lock_initialized = 0;
+static INIT_ONCE s_wsa_lock_init_once = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK s_init_wsa_lock(PINIT_ONCE init_once, PVOID param, PVOID* context) {
+    (void)init_once;
+    (void)param;
+    (void)context;
+    InitializeCriticalSection(&s_wsa_lock);
+    return TRUE;
+}
 
 static void s_ensure_lock(void) {
-    if (InterlockedCompareExchange(&s_lock_initialized, 1, 0) == 0) {
-        InitializeCriticalSection(&s_wsa_lock);
-    }
+    InitOnceExecuteOnce(&s_wsa_lock_init_once, s_init_wsa_lock, NULL, NULL);
 }
 
 void krs_wsa_init(void) {
