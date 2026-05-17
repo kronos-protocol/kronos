@@ -64,12 +64,34 @@ void krs_congestion_on_ack(CongestionController_t* cc, double rtt_ms) {
     }
 }
 
-void krs_congestion_on_loss(CongestionController_t* cc) {
+/* NewReno (RFC 6582) splits the loss reaction by detection mode:
+ *   - Timeout (RTO expired with no further signal): full slow-start
+ *     restart — ssthresh halves and cwnd collapses to 1.
+ *   - Fast retransmit (>= 3 later-ACKed packets): the network is still
+ *     flowing, so cwnd halves to ssthresh and we stay in congestion
+ *     avoidance. This preserves enough in-flight packets for further
+ *     fast-retransmit events on the same flow to fire.
+ * krs_congestion_on_loss is kept as a thin wrapper that defers to the
+ * timeout path (the conservative classical-Reno behaviour) */
+
+void krs_congestion_on_timeout_loss(CongestionController_t* cc) {
     if (!cc) return;
     cc->ssthresh = cc->cwnd / 2.0;
     if (cc->ssthresh < KRS_CC_MIN_CWND) cc->ssthresh = KRS_CC_MIN_CWND;
     cc->cwnd = KRS_CC_MIN_CWND;
     cc->phase = CC_SLOW_START;
+}
+
+void krs_congestion_on_fast_retransmit_loss(CongestionController_t* cc) {
+    if (!cc) return;
+    cc->ssthresh = cc->cwnd / 2.0;
+    if (cc->ssthresh < KRS_CC_MIN_CWND) cc->ssthresh = KRS_CC_MIN_CWND;
+    cc->cwnd = cc->ssthresh;
+    cc->phase = CC_CONGESTION_AVOIDANCE;
+}
+
+void krs_congestion_on_loss(CongestionController_t* cc) {
+    krs_congestion_on_timeout_loss(cc);
 }
 
 uint32_t krs_congestion_get_cwnd(const CongestionController_t* cc) {
