@@ -22,7 +22,6 @@ struct AckTracker {
     uint32_t    timeout_ms;
     uint8_t     max_retries;
     bool        fast_retransmit_enabled;
-    uint64_t    last_acked_packet_id;
 };
 
 #endif // ACK_INTERNAL_H
