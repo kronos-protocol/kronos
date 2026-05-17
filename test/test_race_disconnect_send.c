@@ -27,9 +27,9 @@ static int s_resolve_duration_ms(int argc, char** argv) {
     return RACE_DURATION_MS;
 }
 
-static void s_on_msg(Channel_t channel, ChannelType_e ct, uint32_t conn_id,
+static void s_on_msg(Channel_t channel, uint32_t conn_id,
                      const uint8_t* data, uint16_t len, void* ud) {
-    (void)channel; (void)ct; (void)conn_id; (void)data; (void)len; (void)ud;
+    (void)channel; (void)conn_id; (void)data; (void)len; (void)ud;
 }
 
 static DWORD WINAPI s_client_worker(LPVOID param) {
@@ -40,6 +40,13 @@ static DWORD WINAPI s_client_worker(LPVOID param) {
     while (!s_stop) {
         ServerConnection_t* c = krs_client_server_connect(sa);
         if (!c) continue;
+
+        Void_r sub_r = krs_client_subscribe(c, 10, 2000);
+        if (!sub_r.base.valid) {
+            krs_client_disconnect(&c);
+            continue;
+        }
+
         krs_client_set_callback(c, s_on_msg, NULL);
         krs_client_start_receive(c);
 
