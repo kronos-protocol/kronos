@@ -140,6 +140,15 @@ void krs_frame_builder_set_packet_id(FrameBuilder_c* builder, uint64_t packet_id
 /**
  * @brief Sets a presence flag bit on the frame builder.
  *
+ * @note For META_FLAG_ACK_REQUIRED (presence-only, no payload) this is the
+ *       sufficient call. For META_FLAG_FRAGMENT_INFO, META_FLAG_ACK_ID,
+ *       META_FLAG_PRIORITY, and META_FLAG_TIMESTAMP, prefer the dedicated
+ *       setters (krs_frame_builder_set_fragment_info etc.); they set the
+ *       flag bit AND populate the value that will be serialized. Calling
+ *       this function alone for those flags will serialize a metadata block
+ *       with default-zero values, which is wire-correct but semantically
+ *       meaningless.
+ *
  * @param builder  The frame builder.
  * @param flag     The metadata flag position to set.
  */
@@ -157,15 +166,61 @@ void krs_frame_builder_set_flag(FrameBuilder_c* builder, MetadataFlagPosition_e 
 void krs_frame_builder_set_data(FrameBuilder_c* builder, const uint8_t* data, uint16_t length);
 
 /**
+ * @brief Sets the FRAGMENT_INFO metadata and flips the corresponding presence bit.
+ *
+ * The serialized frame will carry a 4-byte fragment header (index:u16,
+ * total:u16, big-endian) at the start of the body, before any application
+ * payload set via krs_frame_builder_set_data.
+ *
+ * @param builder  The frame builder.
+ * @param index    Fragment index (0-based, must be < total).
+ * @param total    Total number of fragments for the original packet (>= 1).
+ */
+void krs_frame_builder_set_fragment_info(FrameBuilder_c* builder, uint16_t index, uint16_t total);
+
+/**
+ * @brief Sets the ACK_ID metadata and flips the corresponding presence bit.
+ *
+ * Used when the frame itself is acknowledging a specific packet ID inline,
+ * distinct from the receiver-side MESSAGE_ACK frame mechanism.
+ *
+ * @param builder  The frame builder.
+ * @param ack_id   The 64-bit packet ID being acknowledged.
+ */
+void krs_frame_builder_set_ack_id(FrameBuilder_c* builder, uint64_t ack_id);
+
+/**
+ * @brief Sets the PRIORITY metadata and flips the corresponding presence bit.
+ *
+ * @param builder   The frame builder.
+ * @param priority  Application-defined priority value (0-255).
+ */
+void krs_frame_builder_set_priority(FrameBuilder_c* builder, uint8_t priority);
+
+/**
+ * @brief Sets the TIMESTAMP metadata and flips the corresponding presence bit.
+ *
+ * @param builder        The frame builder.
+ * @param timestamp_ms   Milliseconds since epoch (or any monotonic clock,
+ *                       interpretation is application-defined).
+ */
+void krs_frame_builder_set_timestamp(FrameBuilder_c* builder, uint64_t timestamp_ms);
+
+/**
  * @brief Serializes the frame builder into a byte buffer in Kronos wire format.
  *
- * Wire format: [0]='K' [1]=version [2]=channel [3]=type [4-5]=presence_flags(BE)
- *              [6-13]=packet_id(BE) [14..]=body.
+ * Wire format:
+ *   [0]='K' [1]=version [2]=channel [3]=type [4-5]=presence_flags(BE)
+ *   [6-13]=packet_id(BE) [14..14+M-1]=metadata block [14+M..]=body
+ *
+ * The metadata block is M bytes long, where M is the sum of
+ * KRS_METADATA_FLAG_POSITION_SIZE[i] for each presence flag bit i set.
+ * Within the block, payloads are written in bit-position order.
  *
  * @param builder   The frame builder.
  * @param out       Destination buffer.
  * @param out_size  Capacity of out in bytes.
- * @return Total bytes written, or 0 if out is NULL/too small.
+ * @return Total bytes written, or 0 if out is NULL or too small.
  */
 uint16_t krs_frame_builder_serialize(FrameBuilder_c* builder, uint8_t* out, uint16_t out_size);
 
@@ -216,21 +271,29 @@ enum FrameType {
     /** @brief Periodic client liveness signal on channel 1. */
     HEARTBEAT    = 11,
 
-    /**
-     * @brief Reserved frame type — no protocol effect.
-     *
-     * @warning This frame type is leftover scaffolding. It is accepted by the
-     *          parser but produces NO protocol-level behavior. The server only
-     *          sets a label on the corresponding `desc->channel_types[ch]`
-     *          slot, which is forwarded to application callbacks via the
-     *          `ChannelType_e` parameter. Application code MUST NOT rely on
-     *          SOCKET_SETUP for any behavioral distinction. Treat as opaque.
-     *          See Known Issue #17 in SPEC.md.
-     */
-    SOCKET_SETUP  = 12,
-
     /** @brief Graceful client disconnect on channel 0. */
     DISCONNECT    = 13,
+
+    /**
+     * @brief Client-to-server channel subscription request on channel 0.
+     *
+     * Body is exactly 1 byte: the target application channel (must be >= 10).
+     * Recommended: send with META_FLAG_ACK_REQUIRED. The server runs the
+     * subscription before sending the MESSAGE_ACK, so receipt of the ACK
+     * guarantees the subscription is committed and the client may safely
+     * begin sending on the target channel.
+     */
+    SUBSCRIBE     = 14,
+
+    /**
+     * @brief Client-to-server channel unsubscribe request on channel 0.
+     *
+     * Body is exactly 1 byte: the target application channel. After the
+     * server processes this frame, the client will no longer receive
+     * application messages on that channel. Idempotent: unsubscribing
+     * from a non-subscribed channel is a no-op.
+     */
+    UNSUBSCRIBE   = 15,
 
     /** @brief Server reply to CONNECTION carrying the assigned 32-bit connection ID. */
     SOCKET_ACK = 22,
