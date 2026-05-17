@@ -340,16 +340,10 @@ ReassembleResult_t krs_reassembler_feed(Reassembler_t* reassembler, const Frame_
         return result;
     }
 
-    if (fragment->body_length < 4) {
-        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_INVALID_PARAMETER,
-                                                       "fragment body too small");
-        return result;
-    }
-
-    uint16_t index = ((uint16_t)fragment->body[0] << 8) | fragment->body[1];
-    uint16_t total = ((uint16_t)fragment->body[2] << 8) | fragment->body[3];
-    uint16_t payload_size = (uint16_t)(fragment->body_length - 4);
-    const uint8_t* payload = fragment->body + 4;
+    uint16_t index = fragment->metadata.fragment_index;
+    uint16_t total = fragment->metadata.fragment_total;
+    uint16_t payload_size = fragment->body_length;
+    const uint8_t* payload = fragment->body;
 
     if (total == 0 || index >= total || total > KRS_MAX_FRAGMENTS_PER_PACKET) {
         result.base = krs_lib_error_result_base_w_msg(KRS_ERR_INVALID_PARAMETER,
