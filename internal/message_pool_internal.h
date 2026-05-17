@@ -14,6 +14,7 @@ struct MessagePool {
     uint32_t capacity;
     CRITICAL_SECTION lock;
     volatile LONG64 fallback_count;
+    volatile LONG64 outstanding_fallback_count;
 };
 
 MessagePool_t* krs_message_pool_create(uint32_t capacity);
