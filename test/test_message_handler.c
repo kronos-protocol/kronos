@@ -12,19 +12,19 @@ static int s_callback_count = 0;
 static Channel_t s_last_channel = 0;
 static uint32_t s_last_conn_id = 0;
 
-static void s_tracking_callback(Channel_t channel, ChannelType_e channel_type,
-                                 uint32_t connection_id, const uint8_t* data,
-                                 uint16_t data_length, void* user_data) {
-    (void)channel_type; (void)data; (void)data_length; (void)user_data;
+static void s_tracking_callback(Channel_t channel, uint32_t connection_id,
+                                 const uint8_t* data, uint16_t data_length,
+                                 void* user_data) {
+    (void)data; (void)data_length; (void)user_data;
     s_callback_count++;
     s_last_channel = channel;
     s_last_conn_id = connection_id;
 }
 
-static void s_wrong_callback(Channel_t channel, ChannelType_e channel_type,
-                              uint32_t connection_id, const uint8_t* data,
-                              uint16_t data_length, void* user_data) {
-    (void)channel; (void)channel_type; (void)connection_id;
+static void s_wrong_callback(Channel_t channel, uint32_t connection_id,
+                              const uint8_t* data, uint16_t data_length,
+                              void* user_data) {
+    (void)channel; (void)connection_id;
     (void)data; (void)data_length; (void)user_data;
 }
 
@@ -81,7 +81,7 @@ void test_handler_callback_lookup_channel_override(void) {
     TEST_ASSERT_EQUAL_PTR(s_tracking_callback, cb);
 
     uint8_t data[] = {1, 2, 3};
-    cb(15, OPEN_CHANNEL, 0, data, sizeof(data), ud);
+    cb(15, 0, data, sizeof(data), ud);
     TEST_ASSERT_EQUAL_INT(1, s_callback_count);
     TEST_ASSERT_EQUAL_UINT8(15, s_last_channel);
 
@@ -107,7 +107,7 @@ void test_handler_callback_lookup_port_fallback(void) {
     TEST_ASSERT_EQUAL_PTR(s_tracking_callback, cb);
 
     uint8_t data[] = {4, 5};
-    cb(15, OPEN_CHANNEL, 0, data, sizeof(data), ud);
+    cb(15, 0, data, sizeof(data), ud);
     TEST_ASSERT_EQUAL_INT(1, s_callback_count);
 
     free(desc);
@@ -135,7 +135,7 @@ void test_handler_body_null_check(void) {
     if (!handler_would_skip) {
         ChannelMessageCallback_f cb = desc->channel_callbacks[frame.channel];
         if (!cb) cb = desc->port_callback;
-        if (cb) cb(frame.channel, OPEN_CHANNEL, 0, frame.body, frame.body_length, NULL);
+        if (cb) cb(frame.channel, 0, frame.body, frame.body_length, NULL);
     }
 
     TEST_ASSERT_EQUAL_INT(0, s_callback_count);
