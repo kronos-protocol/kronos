@@ -17,6 +17,39 @@
 #include <winsock2.h>
 
 
+void krs_server_finalize_orphan_evictions(ServerPortManager_t* spm,
+                                          UDPSocketDescriptor_t* desc,
+                                          ClientConnection_t** unique_orphans,
+                                          uint32_t orphan_count) {
+    if (orphan_count == 0) return;
+
+    uint32_t evicted_ids[MAX_EVICTIONS_PER_CYCLE];
+    for (uint32_t u = 0; u < orphan_count; u++) {
+        evicted_ids[u] = unique_orphans[u]->connection_id;
+    }
+
+    if (spm->connection_map) {
+        AcquireSRWLockExclusive(&spm->connection_map->lock);
+        for (uint32_t u = 0; u < orphan_count; u++) {
+            krs_connection_map_remove(spm->connection_map, evicted_ids[u]);
+        }
+        ReleaseSRWLockExclusive(&spm->connection_map->lock);
+    }
+
+    for (uint32_t u = 0; u < orphan_count; u++) {
+        krs_connection_map_release(unique_orphans[u]);
+    }
+
+    InterlockedAdd64(&spm->stat_disconnections, orphan_count);
+
+    if (desc->disconnect_callback) {
+        for (uint32_t u = 0; u < orphan_count; u++) {
+            desc->disconnect_callback(evicted_ids[u], 0,
+                                      desc->disconnect_callback_user_data);
+        }
+    }
+}
+
 static void s_send_ack_response(UDPSocketDescriptor_t* desc, const PortAddress_t* remote_addr,
                                 Channel_t channel, uint64_t packet_id) {
     FrameBuilder_c* builder = krs_frame_builder_create(channel, MESSAGE_ACK);
@@ -44,9 +77,8 @@ static void s_dispatch_heartbeat(UDPSocketDescriptor_t* desc,
 
 static void s_dispatch_disconnect(ServerPortManager_t* spm, UDPSocketDescriptor_t* desc,
                                   const PortAddress_t* remote_addr) {
-    EvictedConnection_t evicted[MAX_EVICTIONS_PER_CYCLE];
-    ClientConnection_t* orphaned[MAX_EVICTIONS_PER_CYCLE];
-    uint32_t evicted_count = 0;
+    ClientConnection_t* unique_orphans[MAX_EVICTIONS_PER_CYCLE];
+    uint32_t orphan_count = 0;
 
     AcquireSRWLockExclusive(&desc->state_lock);
     for (uint32_t ch = 0; ch <= MAX_CHANNEL_NUMBER; ch++) {
@@ -58,37 +90,20 @@ static void s_dispatch_disconnect(ServerPortManager_t* spm, UDPSocketDescriptor_
             ClientConnection_t* c = KRS_ARRAY_GET(conns, ci, ClientConnection_t);
             if (!c) continue;
             if (!krs_network_port_address_equals(&c->remote_address, remote_addr)) continue;
-            if (evicted_count < MAX_EVICTIONS_PER_CYCLE) {
-                evicted[evicted_count].connection_id = c->connection_id;
-                evicted[evicted_count].channel = (Channel_t)ch;
-                orphaned[evicted_count] = c;
-                evicted_count++;
+
+            bool already_tracked = false;
+            for (uint32_t u = 0; u < orphan_count; u++) {
+                if (unique_orphans[u] == c) { already_tracked = true; break; }
+            }
+            if (!already_tracked && orphan_count < MAX_EVICTIONS_PER_CYCLE) {
+                unique_orphans[orphan_count++] = c;
             }
             krs_array_remove(conns, ci);
         }
     }
     ReleaseSRWLockExclusive(&desc->state_lock);
 
-    if (spm->connection_map) {
-        AcquireSRWLockExclusive(&spm->connection_map->lock);
-        for (uint32_t e = 0; e < evicted_count; e++) {
-            krs_connection_map_remove(spm->connection_map, evicted[e].connection_id);
-        }
-        ReleaseSRWLockExclusive(&spm->connection_map->lock);
-    }
-
-    for (uint32_t e = 0; e < evicted_count; e++) {
-        krs_connection_map_release(orphaned[e]);
-    }
-
-    InterlockedAdd64(&spm->stat_disconnections, evicted_count);
-
-    if (desc->disconnect_callback) {
-        for (uint32_t e = 0; e < evicted_count; e++) {
-            desc->disconnect_callback(evicted[e].connection_id, evicted[e].channel,
-                                      desc->disconnect_callback_user_data);
-        }
-    }
+    krs_server_finalize_orphan_evictions(spm, desc, unique_orphans, orphan_count);
 }
 
 static void s_dispatch_ack(ServerPortManager_t* spm, UDPSocketDescriptor_t* desc,
@@ -111,7 +126,7 @@ static void s_dispatch_ack(ServerPortManager_t* spm, UDPSocketDescriptor_t* desc
     AcquireSRWLockExclusive(&c->ack_lock);
     double rtt_ms = -1.0;
     if (c->ack_tracker) {
-        rtt_ms = krs_ack_tracker_receive_rtt(c->ack_tracker, frame->packet_id);
+        rtt_ms = krs_ack_tracker_receive_rtt(c->ack_tracker, frame->packet_id, frame->channel);
     }
     ReleaseSRWLockExclusive(&c->ack_lock);
 
@@ -131,10 +146,98 @@ static void s_dispatch_ack(ServerPortManager_t* spm, UDPSocketDescriptor_t* desc
     ReleaseSRWLockShared(&spm->connection_map->lock);
 }
 
-static void s_dispatch_socket_setup(UDPSocketDescriptor_t* desc, const Frame_t* frame) {
+static ClientConnection_t* s_find_conn_on_channel0_unlocked(UDPSocketDescriptor_t* desc,
+                                                            const PortAddress_t* remote_addr) {
+    KrsArray_t* ch0 = desc->channel_states[0].connections;
+    if (!ch0) return NULL;
+    uint32_t count = krs_array_length(ch0);
+    for (uint32_t i = 0; i < count; i++) {
+        ClientConnection_t* c = KRS_ARRAY_GET(ch0, i, ClientConnection_t);
+        if (c && krs_network_port_address_equals(&c->remote_address, remote_addr)) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
+static bool s_array_contains_conn_unlocked(KrsArray_t* arr, ClientConnection_t* needle) {
+    if (!arr) return false;
+    uint32_t count = krs_array_length(arr);
+    for (uint32_t i = 0; i < count; i++) {
+        ClientConnection_t* c = KRS_ARRAY_GET(arr, i, ClientConnection_t);
+        if (c == needle) return true;
+    }
+    return false;
+}
+
+static void s_dispatch_subscribe(UDPSocketDescriptor_t* desc,
+                                 const Frame_t* frame,
+                                 const PortAddress_t* remote_addr) {
+    if (!frame->body || frame->body_length < 1) return;
+    uint8_t target_ch = frame->body[0];
+    if (target_ch < 10 || target_ch > MAX_CHANNEL_NUMBER) {
+        KRS_LOG_DEBUG("message_handler", "subscribe rejected: target channel %u out of range",
+                      target_ch);
+        return;
+    }
+
+    bool committed = false;
     AcquireSRWLockExclusive(&desc->state_lock);
-    desc->channel_types[frame->channel] = SOCKET_CHANNEL;
+    ClientConnection_t* conn = s_find_conn_on_channel0_unlocked(desc, remote_addr);
+    if (conn) {
+        ChannelState_t* target_state = &desc->channel_states[target_ch];
+        if (!target_state->connections) {
+            target_state->connections = krs_array_create(8);
+        }
+        if (target_state->connections &&
+            s_array_contains_conn_unlocked(target_state->connections, conn)) {
+            committed = true;
+        } else if (target_state->connections &&
+                   krs_array_push(target_state->connections, conn).base.error_code == KRS_SUCCESS) {
+            committed = true;
+        }
+    }
     ReleaseSRWLockExclusive(&desc->state_lock);
+
+    if (!committed) {
+        KRS_LOG_DEBUG("message_handler", "subscribe failed for channel %u", target_ch);
+        return;
+    }
+
+    bool ack_required = (frame->presence_flags & (uint16_t)(1u << META_FLAG_ACK_REQUIRED)) != 0;
+    if (ack_required) {
+        s_send_ack_response(desc, remote_addr, 0, frame->packet_id);
+    }
+}
+
+static void s_dispatch_unsubscribe(UDPSocketDescriptor_t* desc,
+                                   const Frame_t* frame,
+                                   const PortAddress_t* remote_addr) {
+    if (!frame->body || frame->body_length < 1) return;
+    uint8_t target_ch = frame->body[0];
+    if (target_ch < 10 || target_ch > MAX_CHANNEL_NUMBER) return;
+
+    AcquireSRWLockExclusive(&desc->state_lock);
+    ClientConnection_t* conn = s_find_conn_on_channel0_unlocked(desc, remote_addr);
+    if (conn) {
+        KrsArray_t* target = desc->channel_states[target_ch].connections;
+        if (target) {
+            uint32_t count = krs_array_length(target);
+            for (uint32_t i = 0; i < count; i++) {
+                ClientConnection_t* c = KRS_ARRAY_GET(target, i, ClientConnection_t);
+                if (c == conn) {
+                    krs_array_remove(target, i);
+                    break;
+                }
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&desc->state_lock);
+
+    bool ack_required = (frame->presence_flags & (uint16_t)(1u << META_FLAG_ACK_REQUIRED)) != 0;
+    if (ack_required) {
+        s_send_ack_response(desc, remote_addr, 0, frame->packet_id);
+    }
 }
 
 static void s_dispatch_app_frame(ServerPortManager_t* spm, UDPSocketDescriptor_t* desc,
@@ -185,10 +288,28 @@ static void s_dispatch_app_frame(ServerPortManager_t* spm, UDPSocketDescriptor_t
     }
 
     uint32_t conn_id = 0;
-    if (spm->connection_map) {
-        AcquireSRWLockShared(&spm->connection_map->lock);
-        conn_id = krs_connection_map_get_by_address(spm->connection_map, remote_addr);
-        ReleaseSRWLockShared(&spm->connection_map->lock);
+    bool subscribed = false;
+
+    AcquireSRWLockShared(&desc->state_lock);
+    KrsArray_t* subs = desc->channel_states[frame->channel].connections;
+    if (subs) {
+        uint32_t count = krs_array_length(subs);
+        for (uint32_t i = 0; i < count; i++) {
+            ClientConnection_t* c = KRS_ARRAY_GET(subs, i, ClientConnection_t);
+            if (c && krs_network_port_address_equals(&c->remote_address, remote_addr)) {
+                conn_id = c->connection_id;
+                subscribed = true;
+                break;
+            }
+        }
+    }
+    ReleaseSRWLockShared(&desc->state_lock);
+
+    if (!subscribed) {
+        KRS_LOG_DEBUG("message_handler", "drop app frame ch=%u: address not subscribed",
+                      frame->channel);
+        free(heap_data);
+        return;
     }
 
     ChannelMessageCallback_f cb = desc->channel_callbacks[frame->channel];
@@ -197,10 +318,9 @@ static void s_dispatch_app_frame(ServerPortManager_t* spm, UDPSocketDescriptor_t
         cb = desc->port_callback;
         ud = desc->port_callback_user_data;
     }
-    ChannelType_e ct = desc->channel_types[frame->channel];
 
     if (cb) {
-        cb(frame->channel, ct, conn_id, callback_data, callback_data_length, ud);
+        cb(frame->channel, conn_id, callback_data, callback_data_length, ud);
     }
 
     free(heap_data);
@@ -220,12 +340,21 @@ static void s_route_frame(ServerPortManager_t* spm, UDPSocketDescriptor_t* desc,
         s_dispatch_disconnect(spm, desc, remote_addr);
         return;
     }
+    if (frame->channel == 0 && frame->frame_type == SUBSCRIBE) {
+        s_dispatch_subscribe(desc, frame, remote_addr);
+        return;
+    }
+    if (frame->channel == 0 && frame->frame_type == UNSUBSCRIBE) {
+        s_dispatch_unsubscribe(desc, frame, remote_addr);
+        return;
+    }
     if (frame->frame_type == MESSAGE_ACK) {
         s_dispatch_ack(spm, desc, frame, remote_addr);
         return;
     }
-    if (frame->frame_type == SOCKET_SETUP && frame->channel >= 10) {
-        s_dispatch_socket_setup(desc, frame);
+    if (frame->frame_type != BASIC_MESSAGE) {
+        KRS_LOG_DEBUG("message_handler", "drop frame: unknown type %u on channel %u",
+                      frame->frame_type, frame->channel);
         return;
     }
     if (frame->channel >= 2 && frame->channel <= 9) {
