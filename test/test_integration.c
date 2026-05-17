@@ -3,7 +3,9 @@
 #include "server_internal.h"
 #include "client_internal.h"
 #include "network_internal.h"
+#include "connection_map_internal.h"
 #include "kronos.h"
+#include "kronos_ack.h"
 #include "malloc_wrapper.h"
 
 #include <unity.h>
@@ -15,10 +17,10 @@ static volatile int s_integ_received = 0;
 static uint8_t s_integ_data[64] = {0};
 static uint16_t s_integ_data_len = 0;
 
-static void s_integ_callback(Channel_t channel, ChannelType_e channel_type,
-                              uint32_t connection_id, const uint8_t* data,
-                              uint16_t data_length, void* user_data) {
-    (void)channel; (void)channel_type; (void)connection_id; (void)user_data;
+static void s_integ_callback(Channel_t channel, uint32_t connection_id,
+                              const uint8_t* data, uint16_t data_length,
+                              void* user_data) {
+    (void)channel; (void)connection_id; (void)user_data;
     if (data_length <= sizeof(s_integ_data)) {
         memcpy(s_integ_data, data, data_length);
         s_integ_data_len = data_length;
@@ -51,6 +53,9 @@ void test_integration_server_client_roundtrip(void) {
     TEST_ASSERT_NOT_NULL(conn);
     TEST_ASSERT_TRUE(conn->connection_id > 0);
 
+    Void_r sub_r = krs_client_subscribe(conn, 10, 2000);
+    TEST_ASSERT_TRUE(sub_r.base.valid);
+
     uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF};
     Void_r send_r = krs_client_send(conn, 10, payload, sizeof(payload), false);
     TEST_ASSERT_TRUE(send_r.base.valid);
@@ -72,10 +77,10 @@ static volatile int s_client_received = 0;
 static uint8_t s_client_data[64] = {0};
 static uint16_t s_client_data_len = 0;
 
-static void s_client_callback(Channel_t channel, ChannelType_e channel_type,
-                               uint32_t connection_id, const uint8_t* data,
-                               uint16_t data_length, void* user_data) {
-    (void)channel; (void)channel_type; (void)connection_id; (void)user_data;
+static void s_client_callback(Channel_t channel, uint32_t connection_id,
+                               const uint8_t* data, uint16_t data_length,
+                               void* user_data) {
+    (void)channel; (void)connection_id; (void)user_data;
     if (data_length <= sizeof(s_client_data)) {
         memcpy(s_client_data, data, data_length);
         s_client_data_len = data_length;
@@ -102,6 +107,9 @@ void test_integration_server_sends_to_client(void) {
     PortAddress_t server_addr = krs_network_port_address_create(19998, addr);
     ServerConnection_t* conn = krs_client_server_connect(server_addr);
     TEST_ASSERT_NOT_NULL(conn);
+
+    Void_r sub_r = krs_client_subscribe(conn, 10, 2000);
+    TEST_ASSERT_TRUE(sub_r.base.valid);
 
     krs_client_set_callback(conn, s_client_callback, NULL);
     Void_r recv_r = krs_client_start_receive(conn);
@@ -172,6 +180,20 @@ void test_integration_delivery_failure_callback(void) {
 
     Void_r sr = krs_server_send(spm, client->connection_id, 15, payload, sizeof(payload), true);
     TEST_ASSERT_TRUE(sr.base.valid);
+
+    // Shorten the auto-created AckTracker's base timeout so that exponential backoff
+    // (1+2+4+8+16+32 = 63 multiplier) fits under the 7000ms test budget.
+    // With base=100ms, total time-to-failure-callback is ~6.3s.
+    UDPSocketDescriptor_t* desc = NULL;
+    ClientConnection_t* target = NULL;
+    if (krs_connection_map_acquire(spm->connection_map, client->connection_id, &desc, &target)) {
+        AcquireSRWLockExclusive(&target->ack_lock);
+        if (target->ack_tracker) {
+            krs_ack_tracker_set_timeout(target->ack_tracker, 100);
+        }
+        ReleaseSRWLockExclusive(&target->ack_lock);
+        krs_connection_map_release(target);
+    }
 
     Sleep(7000);
 
