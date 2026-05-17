@@ -6,6 +6,8 @@
 #include <windows.h>
 
 
+#define KRS_MESSAGE_POOL_MAX_FALLBACK 1024u
+
 MessagePool_t* krs_message_pool_create(uint32_t capacity) {
     if (capacity == 0) capacity = 256;
 
@@ -58,8 +60,20 @@ IncomingMessage_t* krs_message_pool_acquire(MessagePool_t* pool) {
     }
     LeaveCriticalSection(&pool->lock);
 
+    LONG64 outstanding = InterlockedIncrement64(&pool->outstanding_fallback_count);
+    if (outstanding > (LONG64)KRS_MESSAGE_POOL_MAX_FALLBACK) {
+        InterlockedDecrement64(&pool->outstanding_fallback_count);
+        return NULL;
+    }
+
+    IncomingMessage_t* msg = malloc(sizeof(IncomingMessage_t));
+    if (!msg) {
+        InterlockedDecrement64(&pool->outstanding_fallback_count);
+        return NULL;
+    }
+
     InterlockedIncrement64(&pool->fallback_count);
-    return malloc(sizeof(IncomingMessage_t));
+    return msg;
 }
 
 uint64_t krs_message_pool_get_fallback_count(const MessagePool_t* pool) {
@@ -85,5 +99,6 @@ void krs_message_pool_release(MessagePool_t* pool, IncomingMessage_t* msg) {
         LeaveCriticalSection(&pool->lock);
     } else {
         free(msg);
+        InterlockedDecrement64(&pool->outstanding_fallback_count);
     }
 }
