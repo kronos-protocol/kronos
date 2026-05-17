@@ -47,35 +47,45 @@ static void s_send_to_connection(UDPSocketRef_t socket, const ClientConnection_t
 static void s_broadcast_on_descriptor(UDPSocketDescriptor_t* desc, Channel_t channel,
                                       const uint8_t* data, uint16_t length,
                                       uint32_t exclude_id) {
-    AcquireSRWLockShared(&desc->state_lock);
+    ClientConnection_t* snapshot[256];
+    uint64_t pids[256];
+    uint32_t snap_count = 0;
 
+    AcquireSRWLockShared(&desc->state_lock);
     KrsArray_t* conns = desc->channel_states[channel].connections;
     if (!conns) {
         ReleaseSRWLockShared(&desc->state_lock);
         return;
     }
-
-    ChannelState_t* bc_state = &desc->channel_states[channel];
-
     uint32_t count = krs_array_length(conns);
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count && snap_count < 256; i++) {
         ClientConnection_t* conn = KRS_ARRAY_GET(conns, i, ClientConnection_t);
         if (!conn) continue;
         if (conn->connection_id == exclude_id) continue;
+        InterlockedIncrement(&conn->refcount);
+        snapshot[snap_count++] = conn;
+    }
+    ReleaseSRWLockShared(&desc->state_lock);
 
-        AcquireSRWLockExclusive(&bc_state->channel_lock);
-        if (!bc_state->packet_counter) {
-            bc_state->packet_counter = krs_packet_counter_create();
-        }
-        uint64_t pid = bc_state->packet_counter
+    ChannelState_t* bc_state = &desc->channel_states[channel];
+    AcquireSRWLockExclusive(&bc_state->channel_lock);
+    if (!bc_state->packet_counter) {
+        bc_state->packet_counter = krs_packet_counter_create();
+    }
+    for (uint32_t i = 0; i < snap_count; i++) {
+        pids[i] = bc_state->packet_counter
             ? krs_packet_counter_next(bc_state->packet_counter, channel)
             : 0;
-        ReleaseSRWLockExclusive(&bc_state->channel_lock);
+    }
+    ReleaseSRWLockExclusive(&bc_state->channel_lock);
 
-        s_send_to_connection(desc->udp_socket_ref, conn, channel, pid, data, length);
+    for (uint32_t i = 0; i < snap_count; i++) {
+        s_send_to_connection(desc->udp_socket_ref, snapshot[i], channel, pids[i], data, length);
     }
 
-    ReleaseSRWLockShared(&desc->state_lock);
+    for (uint32_t i = 0; i < snap_count; i++) {
+        krs_connection_map_release(snapshot[i]);
+    }
 }
 
 void krs_server_broadcast(ServerPortManager_t* spm, Channel_t channel,
@@ -101,6 +111,48 @@ void krs_server_broadcast_except(ServerPortManager_t* spm, Channel_t channel,
         if (!desc) continue;
         s_broadcast_on_descriptor(desc, channel, data, length, exclude_connection_id);
     }
+}
+
+Void_r krs_server_broadcast_reliable(ServerPortManager_t* spm, Channel_t channel,
+                                     const uint8_t* data, uint16_t length) {
+    Void_r result = {0};
+    if (!spm || !data) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NULL_POINTER, "spm or data NULL");
+        return result;
+    }
+    if (!spm->descriptor_list) {
+        result.base = krs_lib_error_result_base_w_msg(KRS_ERR_NOT_INITIALIZED, "no descriptor list");
+        return result;
+    }
+
+    uint32_t desc_count = krs_array_length(spm->descriptor_list);
+    for (uint32_t di = 0; di < desc_count; di++) {
+        UDPSocketDescriptor_t* desc = KRS_ARRAY_GET(spm->descriptor_list, di, UDPSocketDescriptor_t);
+        if (!desc) continue;
+
+        uint32_t snap_ids[256];
+        uint32_t snap_count = 0;
+
+        AcquireSRWLockShared(&desc->state_lock);
+        KrsArray_t* subs = desc->channel_states[channel].connections;
+        if (subs) {
+            uint32_t count = krs_array_length(subs);
+            for (uint32_t i = 0; i < count && snap_count < 256; i++) {
+                ClientConnection_t* c = KRS_ARRAY_GET(subs, i, ClientConnection_t);
+                if (c) {
+                    snap_ids[snap_count++] = c->connection_id;
+                }
+            }
+        }
+        ReleaseSRWLockShared(&desc->state_lock);
+
+        for (uint32_t i = 0; i < snap_count; i++) {
+            (void)krs_server_send(spm, snap_ids[i], channel, data, length, true);
+        }
+    }
+
+    result.base = krs_lib_error_result_base_suc();
+    return result;
 }
 
 Void_r krs_server_send(ServerPortManager_t* spm, uint32_t connection_id, Channel_t channel,
@@ -240,12 +292,20 @@ Void_r krs_server_send_blocking(ServerPortManager_t* spm, uint32_t connection_id
                                 Channel_t channel, const uint8_t* data,
                                 uint16_t length, uint32_t timeout_ms) {
     uint64_t deadline = GetTickCount64() + timeout_ms;
+    uint32_t backoff_ms = 1;
 
     for (;;) {
         Void_r result = krs_server_send(spm, connection_id, channel, data, length, true);
         if (result.base.valid) return result;
         if (result.base.error_code != KRS_ERR_SERVER_CONGESTION_WINDOW_FULL) return result;
-        if (GetTickCount64() >= deadline) return result;
-        Sleep(1);
+
+        uint64_t now = GetTickCount64();
+        if (now >= deadline) return result;
+
+        uint64_t remaining = deadline - now;
+        DWORD sleep_ms = (DWORD)(backoff_ms < remaining ? backoff_ms : remaining);
+        Sleep(sleep_ms);
+
+        if (backoff_ms < 50) backoff_ms *= 2;
     }
 }
