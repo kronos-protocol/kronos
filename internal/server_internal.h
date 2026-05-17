@@ -19,7 +19,7 @@
 #include <stdint.h>
 
 /*
- * Lock hierarchy (SPEC v20+, post-LOCK_UNIFY):
+ * Lock hierarchy:
  *
  *   connection_map->lock  >  desc->state_lock  >  channel_states[ch].channel_lock  >  conn->ack_lock
  *
@@ -69,7 +69,6 @@ struct UDPSocketDescriptor {
     UDPSocketRef_t           udp_socket_ref;
     SRWLOCK                  state_lock;
     UDPOverlapped_t*         recv_ctx;
-    ChannelType_e            channel_types[MAX_CHANNEL_NUMBER + 1];
     ChannelMessageCallback_f port_callback;
     void*                    port_callback_user_data;
     ChannelMessageCallback_f channel_callbacks[MAX_CHANNEL_NUMBER + 1];
@@ -125,5 +124,10 @@ void krs_server_handle_heartbeat_frame(UDPSocketDescriptor_t* descriptor,
                                        const PortAddress_t* remote_addr);
 
 DWORD WINAPI krs_server_retransmit_thread(LPVOID param);
+
+void krs_server_finalize_orphan_evictions(struct ServerPortManager* spm,
+                                          UDPSocketDescriptor_t* desc,
+                                          struct ClientConnection** unique_orphans,
+                                          uint32_t orphan_count);
 
 #endif // SERVER_INTERNAL_H
