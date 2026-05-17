@@ -11,10 +11,10 @@
 #include <stdlib.h>
 
 
-static void s_dummy_callback(Channel_t channel, ChannelType_e channel_type,
-                              uint32_t connection_id, const uint8_t* data,
-                              uint16_t data_length, void* user_data) {
-    (void)channel; (void)channel_type; (void)connection_id;
+static void s_dummy_callback(Channel_t channel, uint32_t connection_id,
+                              const uint8_t* data, uint16_t data_length,
+                              void* user_data) {
+    (void)channel; (void)connection_id;
     (void)data; (void)data_length; (void)user_data;
 }
 
@@ -157,16 +157,16 @@ void test_handle_connection_frame_creates_connection(void) {
 
     krs_server_handle_connection_frame(spm, desc, &frame, &remote_addr);
 
-    TEST_ASSERT_NOT_NULL(desc->channel_states[15].connections);
-    TEST_ASSERT_EQUAL_UINT32(1, krs_array_length(desc->channel_states[15].connections));
+    TEST_ASSERT_NOT_NULL(desc->channel_states[0].connections);
+    TEST_ASSERT_EQUAL_UINT32(1, krs_array_length(desc->channel_states[0].connections));
 
-    ClientConnection_t* conn = KRS_ARRAY_GET(desc->channel_states[15].connections, 0, ClientConnection_t);
+    ClientConnection_t* conn = KRS_ARRAY_GET(desc->channel_states[0].connections, 0, ClientConnection_t);
     TEST_ASSERT_NOT_NULL(conn);
     TEST_ASSERT_TRUE(conn->connection_id > 0);
     TEST_ASSERT_TRUE(krs_network_port_address_equals(&conn->remote_address, &remote_addr));
 
     free(conn);
-    krs_array_destroy(&desc->channel_states[15].connections);
+    krs_array_destroy(&desc->channel_states[0].connections);
     free(spm);
     free(desc);
     krs_wsa_cleanup();
