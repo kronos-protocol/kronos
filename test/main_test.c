@@ -46,6 +46,12 @@ void test_frame_metadata_flag_count(void);
 void test_frame_create_rejects_different_major_version(void);
 void test_frame_create_accepts_same_major_different_minor_patch(void);
 void test_frame_create_s_returns_unsupported_version_error(void);
+void test_frame_builder_set_fragment_info_roundtrip(void);
+void test_frame_builder_set_ack_id_roundtrip(void);
+void test_frame_builder_set_priority_roundtrip(void);
+void test_frame_builder_set_timestamp_roundtrip(void);
+void test_frame_builder_combined_metadata_block_in_bit_order(void);
+void test_frame_create_rejects_truncated_metadata_block(void);
 
 void test_ack_tracker_create_destroy(void);
 void test_ack_tracker_destroy_null(void);
@@ -77,6 +83,12 @@ void test_ack_tracker_channel_preserved_on_retry(void);
 void test_ack_tracker_channel_preserved_on_drop(void);
 void test_ack_tracker_channel_per_entry_independent(void);
 void test_ack_check_timeouts_returns_valid_entry_handles(void);
+void test_ack_tracker_retry_uses_exponential_backoff(void);
+void test_ack_tracker_backoff_clamps_at_60_seconds(void);
+void test_ack_tracker_fast_retransmit_unaffected_by_backoff(void);
+void test_ack_tracker_fast_retransmit_does_not_leak_across_channels(void);
+void test_ack_tracker_fast_retransmit_only_counts_same_channel(void);
+void test_ack_tracker_receive_does_not_remove_other_channel_same_pid(void);
 
 void test_packet_counter_create_destroy(void);
 void test_packet_counter_starts_at_zero(void);
@@ -87,6 +99,7 @@ void test_packet_counter_reset_isolated(void);
 void test_packet_counter_null_safety(void);
 void test_packet_counter_create_malloc_failure(void);
 void test_packet_counter_boundary_channels(void);
+void test_packet_counter_concurrent_next_no_lost_increments(void);
 
 void test_fragment_split_no_frag_when_fits(void);
 void test_fragment_split_correct_count(void);
@@ -159,11 +172,31 @@ void test_handler_reserved_channel_no_callback(void);
 void test_wsa_init_cleanup_single(void);
 void test_wsa_init_double_cleanup_double(void);
 void test_wsa_cleanup_without_init(void);
+void test_wsa_init_cleanup_concurrent_no_crash(void);
 
 void test_integration_server_client_roundtrip(void);
 void test_integration_server_sends_to_client(void);
 void test_integration_connect_disconnect_lifecycle(void);
 void test_integration_delivery_failure_callback(void);
+
+void test_subscribe_filters_unsubscribed_channels(void);
+void test_unsubscribe_stops_delivery(void);
+void test_disconnect_with_three_subscriptions_releases_once(void);
+void test_reliable_broadcast_per_recipient_failure(void);
+void test_disconnect_callback_fires_once_with_channel_zero(void);
+void test_disconnect_callback_fires_on_server_stop_for_active_clients(void);
+
+void test_connection_map_remove_increments_tombstones(void);
+void test_connection_map_insert_recycles_tombstone(void);
+void test_connection_map_grow_resets_tombstones(void);
+void test_connection_map_high_churn_capacity_bounded(void);
+void test_connection_map_put_same_id_updates_in_place(void);
+
+void test_message_pool_basic_acquire_release(void);
+void test_message_pool_fallback_within_cap_succeeds(void);
+void test_message_pool_fallback_cap_returns_null(void);
+void test_message_pool_fallback_count_lifetime_monotonic(void);
+void test_message_pool_concurrent_acquire_release_outstanding_returns_zero(void);
 
 void test_cc_create_destroy(void);
 void test_cc_destroy_null(void);
@@ -179,6 +212,14 @@ void test_cc_rtt_converges(void);
 void test_cc_rto_clamping(void);
 void test_cc_on_send_increments_in_flight(void);
 void test_cc_create_malloc_failure(void);
+void test_cc_timeout_loss_collapses_to_min(void);
+void test_cc_fast_retransmit_loss_keeps_half_window(void);
+void test_cc_fast_retransmit_loss_floor_min(void);
+void test_cc_on_loss_wrapper_matches_timeout_loss(void);
+void test_cc_loss_variants_handle_null(void);
+
+void test_ack_check_timeouts_reports_fast_vs_timeout(void);
+void test_ack_check_timeouts_was_fast_optional(void);
 
 
 int main(void) {
@@ -221,6 +262,12 @@ int main(void) {
     RUN_TEST(test_frame_create_rejects_different_major_version);
     RUN_TEST(test_frame_create_accepts_same_major_different_minor_patch);
     RUN_TEST(test_frame_create_s_returns_unsupported_version_error);
+    RUN_TEST(test_frame_builder_set_fragment_info_roundtrip);
+    RUN_TEST(test_frame_builder_set_ack_id_roundtrip);
+    RUN_TEST(test_frame_builder_set_priority_roundtrip);
+    RUN_TEST(test_frame_builder_set_timestamp_roundtrip);
+    RUN_TEST(test_frame_builder_combined_metadata_block_in_bit_order);
+    RUN_TEST(test_frame_create_rejects_truncated_metadata_block);
 
     RUN_TEST(test_ack_tracker_create_destroy);
     RUN_TEST(test_ack_tracker_destroy_null);
@@ -252,6 +299,12 @@ int main(void) {
     RUN_TEST(test_ack_tracker_channel_preserved_on_drop);
     RUN_TEST(test_ack_tracker_channel_per_entry_independent);
     RUN_TEST(test_ack_check_timeouts_returns_valid_entry_handles);
+    RUN_TEST(test_ack_tracker_retry_uses_exponential_backoff);
+    RUN_TEST(test_ack_tracker_backoff_clamps_at_60_seconds);
+    RUN_TEST(test_ack_tracker_fast_retransmit_unaffected_by_backoff);
+    RUN_TEST(test_ack_tracker_fast_retransmit_does_not_leak_across_channels);
+    RUN_TEST(test_ack_tracker_fast_retransmit_only_counts_same_channel);
+    RUN_TEST(test_ack_tracker_receive_does_not_remove_other_channel_same_pid);
 
     RUN_TEST(test_packet_counter_create_destroy);
     RUN_TEST(test_packet_counter_starts_at_zero);
@@ -262,6 +315,7 @@ int main(void) {
     RUN_TEST(test_packet_counter_null_safety);
     RUN_TEST(test_packet_counter_create_malloc_failure);
     RUN_TEST(test_packet_counter_boundary_channels);
+    RUN_TEST(test_packet_counter_concurrent_next_no_lost_increments);
 
     RUN_TEST(test_fragment_split_no_frag_when_fits);
     RUN_TEST(test_fragment_split_correct_count);
@@ -334,6 +388,7 @@ int main(void) {
     RUN_TEST(test_wsa_init_cleanup_single);
     RUN_TEST(test_wsa_init_double_cleanup_double);
     RUN_TEST(test_wsa_cleanup_without_init);
+    RUN_TEST(test_wsa_init_cleanup_concurrent_no_crash);
 
     RUN_TEST(test_cc_create_destroy);
     RUN_TEST(test_cc_destroy_null);
@@ -349,11 +404,38 @@ int main(void) {
     RUN_TEST(test_cc_rto_clamping);
     RUN_TEST(test_cc_on_send_increments_in_flight);
     RUN_TEST(test_cc_create_malloc_failure);
+    RUN_TEST(test_cc_timeout_loss_collapses_to_min);
+    RUN_TEST(test_cc_fast_retransmit_loss_keeps_half_window);
+    RUN_TEST(test_cc_fast_retransmit_loss_floor_min);
+    RUN_TEST(test_cc_on_loss_wrapper_matches_timeout_loss);
+    RUN_TEST(test_cc_loss_variants_handle_null);
+
+    RUN_TEST(test_ack_check_timeouts_reports_fast_vs_timeout);
+    RUN_TEST(test_ack_check_timeouts_was_fast_optional);
 
     RUN_TEST(test_integration_server_client_roundtrip);
     RUN_TEST(test_integration_server_sends_to_client);
     RUN_TEST(test_integration_connect_disconnect_lifecycle);
     RUN_TEST(test_integration_delivery_failure_callback);
+
+    RUN_TEST(test_subscribe_filters_unsubscribed_channels);
+    RUN_TEST(test_unsubscribe_stops_delivery);
+    RUN_TEST(test_disconnect_with_three_subscriptions_releases_once);
+    RUN_TEST(test_reliable_broadcast_per_recipient_failure);
+    RUN_TEST(test_disconnect_callback_fires_once_with_channel_zero);
+    RUN_TEST(test_disconnect_callback_fires_on_server_stop_for_active_clients);
+
+    RUN_TEST(test_connection_map_remove_increments_tombstones);
+    RUN_TEST(test_connection_map_insert_recycles_tombstone);
+    RUN_TEST(test_connection_map_grow_resets_tombstones);
+    RUN_TEST(test_connection_map_high_churn_capacity_bounded);
+    RUN_TEST(test_connection_map_put_same_id_updates_in_place);
+
+    RUN_TEST(test_message_pool_basic_acquire_release);
+    RUN_TEST(test_message_pool_fallback_within_cap_succeeds);
+    RUN_TEST(test_message_pool_fallback_cap_returns_null);
+    RUN_TEST(test_message_pool_fallback_count_lifetime_monotonic);
+    RUN_TEST(test_message_pool_concurrent_acquire_release_outstanding_returns_zero);
 
     return UNITY_END();
 }
