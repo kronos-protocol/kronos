@@ -1,0 +1,23 @@
+#include "kronos.h"
+#include "frame_body.h"
+#include "frame_metadata.h"
+
+
+uint16_t krs_frame_calculate_body_length(const uint16_t received_bytes) {
+    return received_bytes - KRONOS_FRAME_HEADER_LENGTH;
+}
+
+uint16_t krs_frame_metadata_block_length(uint16_t presence_flags) {
+    uint16_t total_length = 0;
+    for (int i = 0; i < META_FLAG_COUNT; i++) {
+        if (presence_flags & (uint16_t)(1u << i)) {
+            total_length += KRS_METADATA_FLAG_POSITION_SIZE[i];
+        }
+    }
+    return total_length;
+}
+
+uint16_t krs_frame_body_metadata_get_length(const Frame_t* frame) {
+    if (!frame) return 0;
+    return krs_frame_metadata_block_length(frame->presence_flags);
+}
